@@ -67,11 +67,13 @@ export function ListTicketPage() {
     const seller = String(publicKey).slice(0, 6) + '...' + String(publicKey).slice(-4);
 
     const newListing = await createListing({
+      ticketId: ticket.id,
       event: ticket.event,
       artist: ticket.artist,
       originalPrice: original,
       currentPrice,
       seller,
+      sellerWallet: publicKey!,
       sellerRep: 'Gold',
       date: ticket.date,
       verified: true,

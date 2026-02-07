@@ -27,6 +27,8 @@ const onChainEvents = [];
 let nextOnChainId = 100; // start IDs at 100 to avoid collision with mocks
 const purchases = [];
 let nextTicketId = 1;
+const userListings = [];
+let nextListingId = 1000;
 
 function loadData() {
   if (!existsSync(DATA_PATH)) return;
@@ -35,8 +37,10 @@ function loadData() {
     const parsed = JSON.parse(raw);
     const events = Array.isArray(parsed.onChainEvents) ? parsed.onChainEvents : [];
     const savedPurchases = Array.isArray(parsed.purchases) ? parsed.purchases : [];
+    const savedListings = Array.isArray(parsed.userListings) ? parsed.userListings : [];
     const savedNextOnChainId = Number(parsed.nextOnChainId);
     const savedNextTicketId = Number(parsed.nextTicketId);
+    const savedNextListingId = Number(parsed.nextListingId);
     const mapEntries = parsed.eventIdToPubkeyEntries ?? [];
 
     onChainEvents.length = 0;
@@ -45,8 +49,12 @@ function loadData() {
     purchases.length = 0;
     purchases.push(...savedPurchases);
 
+    userListings.length = 0;
+    userListings.push(...savedListings);
+
     if (!Number.isNaN(savedNextOnChainId)) nextOnChainId = savedNextOnChainId;
     if (!Number.isNaN(savedNextTicketId)) nextTicketId = savedNextTicketId;
+    if (!Number.isNaN(savedNextListingId)) nextListingId = savedNextListingId;
 
     eventIdToPubkey.clear();
     if (Array.isArray(mapEntries)) {
@@ -64,8 +72,10 @@ function saveData() {
     const payload = {
       onChainEvents,
       purchases,
+      userListings,
       nextOnChainId,
       nextTicketId,
+      nextListingId,
       eventIdToPubkeyEntries: Array.from(eventIdToPubkey.entries()),
     };
     writeFileSync(DATA_PATH, JSON.stringify(payload, null, 2), 'utf8');
@@ -237,20 +247,58 @@ app.get('/api/tickets', (req, res) => {
   res.json(owned);
 });
 
-// Mock listings (match Frontend Listing type; replace with Listing PDAs when program is wired)
+// Resale listings
 const MOCK_LISTINGS = [
   { id: 1, event: 'Synthwave Sunset Festival', artist: 'Neon Dreams', originalPrice: 0.5, currentPrice: 0.55, seller: '7a2f...3b4c', sellerRep: 'Gold', date: 'March 15, 2026', verified: true, priceChange: 10, listingAge: '2 hours ago' },
   { id: 2, event: 'Jazz in the Park', artist: 'The Blue Notes Collective', originalPrice: 0.3, currentPrice: 0.28, seller: '9c4d...7e2a', sellerRep: 'Silver', date: 'March 22, 2026', verified: true, priceChange: -7, listingAge: '5 hours ago' },
-  { id: 3, event: 'Ethereal Beats World Tour', artist: 'DJ Aurora', originalPrice: 0.8, currentPrice: 0.82, seller: '3f8e...1d6b', sellerRep: 'Gold', date: 'April 5, 2026', verified: true, priceChange: 2.5, listingAge: '1 day ago' },
-  { id: 4, event: 'Indie Rock Underground', artist: 'The Echoes', originalPrice: 0.4, currentPrice: 0.41, seller: '6b2c...9f3e', sellerRep: 'Bronze', date: 'April 12, 2026', verified: true, priceChange: 2.5, listingAge: '3 hours ago' },
 ];
 
+function getAllListings() {
+  // User listings first (newest at top), then mock listings
+  return [...userListings, ...MOCK_LISTINGS];
+}
+
 app.get('/api/listings', (_req, res) => {
-  res.json(MOCK_LISTINGS);
+  res.json(getAllListings());
 });
 
-app.post('/api/listings', (_req, res) => {
-  res.status(501).json({ error: 'Not implemented: wire to Anchor list' });
+// Create a resale listing from a purchased ticket
+app.post('/api/listings', (req, res) => {
+  const { ticketId, event, artist, originalPrice, currentPrice, seller, sellerRep, date, verified, priceChange, sellerWallet } = req.body ?? {};
+  if (!event || currentPrice == null) {
+    return res.status(400).json({ error: 'Missing required fields: event, currentPrice' });
+  }
+
+  const listing = {
+    id: nextListingId++,
+    ticketId: ticketId ?? null,
+    event,
+    artist: artist ?? 'Unknown',
+    originalPrice: Number(originalPrice) || 0,
+    currentPrice: Number(currentPrice),
+    seller: seller ?? 'unknown',
+    sellerWallet: sellerWallet ?? null,
+    sellerRep: sellerRep ?? 'Bronze',
+    date: date ?? 'TBD',
+    verified: verified ?? true,
+    priceChange: priceChange ?? 0,
+    listingAge: 'Just now',
+    listedAt: new Date().toISOString(),
+  };
+
+  userListings.unshift(listing);
+  saveData();
+  res.json(listing);
+});
+
+// Remove a listing (cancel resale)
+app.delete('/api/listings/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const idx = userListings.findIndex((l) => l.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Listing not found' });
+  userListings.splice(idx, 1);
+  saveData();
+  res.json({ success: true });
 });
 
 app.post('/api/listings/buy', (_req, res) => {

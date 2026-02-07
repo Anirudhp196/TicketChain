@@ -4,14 +4,15 @@
  * Purpose:
  * - Show tickets purchased by connected wallet
  * - Link to attendee list for each event
+ * - List tickets for resale on the marketplace
  */
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Navigation } from './Navigation';
-import { Calendar, Ticket, Users } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { getMyTickets } from '../lib/api';
+import { Calendar, Ticket, Users, X, TrendingUp, Shield, DollarSign } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { getMyTickets, createListing } from '../lib/api';
 import { useWallet, shortenAddress } from '../contexts/WalletContext';
 import type { Ticket as TicketType } from '../types';
 
@@ -20,6 +21,13 @@ export function MyTicketsPage() {
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  // Resale modal state
+  const [resaleTicket, setResaleTicket] = useState<TicketType | null>(null);
+  const [resalePrice, setResalePrice] = useState('');
+  const [listing, setListing] = useState(false);
+  const [listSuccess, setListSuccess] = useState(false);
 
   useEffect(() => {
     if (!connected || !publicKey) return;
@@ -40,6 +48,55 @@ export function MyTicketsPage() {
       cancelled = true;
     };
   }, [connected, publicKey]);
+
+  function openResaleModal(ticket: TicketType) {
+    setResaleTicket(ticket);
+    setResalePrice(ticket.suggestedPrice?.toString() ?? (ticket.purchasePrice * 1.1).toFixed(2));
+    setListSuccess(false);
+  }
+
+  function closeResaleModal() {
+    setResaleTicket(null);
+    setResalePrice('');
+    setListing(false);
+    setListSuccess(false);
+  }
+
+  async function handleListForResale() {
+    if (!resaleTicket || !publicKey) return;
+    const currentPrice = Number(resalePrice) || 0;
+    if (currentPrice <= 0) return;
+    const original = Number(resaleTicket.purchasePrice) || 0;
+    const priceChange = original > 0 ? Math.round(((currentPrice - original) / original) * 10000) / 100 : 0;
+    const seller = String(publicKey).slice(0, 6) + '...' + String(publicKey).slice(-4);
+
+    setListing(true);
+    try {
+      await createListing({
+        ticketId: resaleTicket.id,
+        event: resaleTicket.event,
+        artist: resaleTicket.artist,
+        originalPrice: original,
+        currentPrice,
+        seller,
+        sellerWallet: publicKey,
+        sellerRep: 'Bronze',
+        date: resaleTicket.date,
+        verified: true,
+        priceChange,
+      });
+      setListSuccess(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create listing');
+    } finally {
+      setListing(false);
+    }
+  }
+
+  const price = Number(resalePrice) || 0;
+  const sellerCut = price * 0.4;
+  const artistCut = price * 0.4;
+  const platformCut = price * 0.2;
 
   return (
     <div className="min-h-screen bg-[#090b0b] text-[#fafaf9]">
@@ -136,12 +193,12 @@ export function MyTicketsPage() {
                             View attendees
                           </Link>
                         )}
-                        <Link
-                          to="/list-ticket"
-                          className="ml-auto text-sm text-[#87928e] hover:text-[#fafaf9]"
+                        <button
+                          onClick={() => openResaleModal(ticket)}
+                          className="ml-auto text-sm text-[#87928e] hover:text-[#32b377] transition-colors font-['Inter:Medium',sans-serif]"
                         >
                           List for resale
-                        </Link>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -151,6 +208,153 @@ export function MyTicketsPage() {
           )}
         </div>
       </section>
+
+      {/* Resale Listing Modal */}
+      <AnimatePresence>
+        {resaleTicket && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            onClick={(e) => { if (e.target === e.currentTarget) closeResaleModal(); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.3 }}
+              className="bg-[#131615] border border-[#262b2a] rounded-2xl w-full max-w-lg overflow-hidden"
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between p-6 border-b border-[#262b2a]">
+                <h2 className="font-['Space_Grotesk:Bold',sans-serif] text-2xl">
+                  List for <span className="text-[#32b377]">Resale</span>
+                </h2>
+                <button
+                  onClick={closeResaleModal}
+                  className="w-8 h-8 rounded-full bg-[rgba(255,255,255,0.1)] flex items-center justify-center hover:bg-[rgba(255,255,255,0.2)] transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {listSuccess ? (
+                /* Success state */
+                <div className="p-8 text-center">
+                  <div className="w-16 h-16 rounded-full bg-[rgba(50,179,119,0.1)] flex items-center justify-center mx-auto mb-4">
+                    <Shield className="w-8 h-8 text-[#32b377]" />
+                  </div>
+                  <h3 className="font-['Space_Grotesk:Bold',sans-serif] text-xl mb-2">
+                    Ticket Listed!
+                  </h3>
+                  <p className="text-[#87928e] text-sm mb-6 font-['Inter:Regular',sans-serif]">
+                    Your ticket for <span className="text-[#fafaf9]">{resaleTicket.event}</span> is now live on the marketplace at <span className="text-[#32b377]">{price.toFixed(2)} SOL</span>.
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => { closeResaleModal(); navigate('/marketplace#listings'); }}
+                      className="bg-[#32b377] hover:bg-[#2a9865] transition-all px-6 py-3 rounded-xl font-['Inter:Medium',sans-serif] text-[#090b0b]"
+                    >
+                      View on Marketplace
+                    </button>
+                    <button
+                      onClick={closeResaleModal}
+                      className="border border-[#262b2a] hover:border-[#32b377] transition-all px-6 py-3 rounded-xl font-['Inter:Medium',sans-serif] text-[#87928e] hover:text-[#fafaf9]"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Listing form */
+                <div className="p-6 space-y-6">
+                  {/* Ticket info */}
+                  <div className="p-4 bg-[rgba(38,43,42,0.5)] rounded-xl">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Ticket className="w-5 h-5 text-[#32b377]" />
+                      <h3 className="font-['Space_Grotesk:Bold',sans-serif] text-lg">{resaleTicket.event}</h3>
+                    </div>
+                    <p className="text-[#87928e] text-sm font-['Inter:Regular',sans-serif]">
+                      {resaleTicket.artist} • {resaleTicket.tier} • {resaleTicket.date}
+                    </p>
+                    <p className="text-[#87928e] text-xs mt-1 font-['Inter:Regular',sans-serif]">
+                      Original price: <span className="text-[#fafaf9]">{resaleTicket.purchasePrice} SOL</span>
+                    </p>
+                  </div>
+
+                  {/* Price input */}
+                  <div>
+                    <label className="block text-sm mb-2 font-['Inter:Medium',sans-serif]">Resale Price (SOL)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={resalePrice}
+                        onChange={(e) => setResalePrice(e.target.value)}
+                        className="w-full bg-[rgba(38,43,42,0.5)] border-2 border-[#262b2a] focus:border-[#32b377] rounded-xl px-5 py-3 text-2xl text-[#fafaf9] focus:outline-none transition-colors font-['Space_Grotesk:Bold',sans-serif]"
+                      />
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 text-[#87928e] font-['Space_Grotesk:Bold',sans-serif]">
+                        SOL
+                      </div>
+                    </div>
+                    {resaleTicket.suggestedPrice != null && (
+                      <button
+                        onClick={() => setResalePrice(resaleTicket.suggestedPrice.toString())}
+                        className="mt-2 text-xs text-[#32b377] hover:text-[#2a9865] transition-colors font-['Inter:Medium',sans-serif]"
+                      >
+                        Use suggested: {resaleTicket.suggestedPrice} SOL
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Fair split preview */}
+                  <div className="space-y-2">
+                    <div className="text-xs text-[#87928e] font-['Inter:Medium',sans-serif] mb-1">
+                      40/40/20 Fair Split Preview
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-1 p-3 bg-[rgba(50,179,119,0.05)] border border-[rgba(50,179,119,0.2)] rounded-xl text-center">
+                        <div className="text-xs text-[#87928e] mb-1 font-['Inter:Regular',sans-serif]">You get</div>
+                        <div className="font-['Space_Grotesk:Bold',sans-serif] text-lg text-[#32b377]">{sellerCut.toFixed(3)}</div>
+                        <div className="text-xs text-[#87928e]">40%</div>
+                      </div>
+                      <div className="flex-1 p-3 bg-[rgba(38,43,42,0.3)] border border-[#262b2a] rounded-xl text-center">
+                        <div className="text-xs text-[#87928e] mb-1 font-['Inter:Regular',sans-serif]">Artist</div>
+                        <div className="font-['Space_Grotesk:Bold',sans-serif] text-lg">{artistCut.toFixed(3)}</div>
+                        <div className="text-xs text-[#87928e]">40%</div>
+                      </div>
+                      <div className="flex-1 p-3 bg-[rgba(38,43,42,0.3)] border border-[#262b2a] rounded-xl text-center">
+                        <div className="text-xs text-[#87928e] mb-1 font-['Inter:Regular',sans-serif]">Platform</div>
+                        <div className="font-['Space_Grotesk:Bold',sans-serif] text-lg">{platformCut.toFixed(3)}</div>
+                        <div className="text-xs text-[#87928e]">20%</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={handleListForResale}
+                      disabled={listing || price <= 0}
+                      className="flex-1 bg-[#32b377] hover:bg-[#2a9865] disabled:opacity-60 disabled:cursor-not-allowed transition-all px-6 py-3.5 rounded-xl font-['Inter:Medium',sans-serif] text-[#090b0b] shadow-lg hover:shadow-[0_0_20px_rgba(50,179,119,0.3)]"
+                    >
+                      {listing ? 'Listing...' : 'List Ticket'}
+                    </button>
+                    <button
+                      onClick={closeResaleModal}
+                      className="border border-[#262b2a] hover:border-[#32b377] transition-all px-6 py-3.5 rounded-xl font-['Inter:Medium',sans-serif] text-[#87928e] hover:text-[#fafaf9]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

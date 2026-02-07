@@ -200,12 +200,28 @@ export async function getEventAttendees(eventId: string): Promise<{ attendees: {
   return res.json();
 }
 
+export interface CreateListingArgs {
+  ticketId?: string | number;
+  event: string;
+  artist: string;
+  originalPrice: number;
+  currentPrice: number;
+  seller: string;
+  sellerWallet: string;
+  sellerRep?: string;
+  date: string;
+  verified?: boolean;
+  priceChange: number;
+}
+
 /** Create a marketplace listing. Falls back to in-memory mock when API not configured. */
-export async function createListing(listing: Omit<Listing, 'id' | 'listingAge'>): Promise<Listing> {
+export async function createListing(listing: CreateListingArgs): Promise<Listing> {
   const newListing: Listing = {
     ...listing,
     id: Date.now(),
     listingAge: 'Just now',
+    verified: listing.verified ?? true,
+    sellerRep: listing.sellerRep ?? 'Bronze',
   } as Listing;
 
   if (!API_BASE) {
@@ -220,7 +236,6 @@ export async function createListing(listing: Omit<Listing, 'id' | 'listingAge'>)
       body: JSON.stringify(listing),
     });
     if (!res.ok) {
-      // if server rejects, fallback to local
       LOCAL_LISTINGS.unshift(newListing);
       return newListing;
     }
