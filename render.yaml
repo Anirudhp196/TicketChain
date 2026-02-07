@@ -10,8 +10,9 @@ services:
       - key: SOLANA_RPC_URL
         value: https://api.devnet.solana.com
 
-  - type: static
+  - type: web
     name: ticketchain-frontend
+    runtime: static
     rootDir: Frontend
     plan: free
     buildCommand: npm install && npm run build
