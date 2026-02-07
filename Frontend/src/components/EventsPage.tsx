@@ -253,7 +253,7 @@ export function EventsPage() {
                       </Link>
                       <Link
                         to={`/events/${event.id}/attendees`}
-                        className="text-xs text-[#87928e] hover:text-[#32b377] transition-colors"
+                        className="block w-full text-right text-xs text-[#87928e] hover:text-[#32b377] transition-colors font-['Inter:Regular',sans-serif]"
                       >
                         View attendees
                       </Link>
