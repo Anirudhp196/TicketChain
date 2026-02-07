@@ -78,10 +78,10 @@ export function MarketplacePage() {
             className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8"
           >
             {[
-              { label: "Active Listings", value: "1,234", icon: TrendingUp },
-              { label: "Avg Resale Price", value: "0.52 SOL", icon: DollarSign },
-              { label: "Artists Earning", value: "456", icon: Users },
-              { label: "Fair Splits Paid", value: "12.5K", icon: Shield }
+              { label: "Active Listings", value: String(listings.length), icon: TrendingUp },
+              { label: "Avg Resale Price", value: listings.length > 0 ? (listings.reduce((s, l) => s + l.currentPrice, 0) / listings.length).toFixed(2) + ' SOL' : '— SOL', icon: DollarSign },
+              { label: "Unique Sellers", value: String(new Set(listings.map(l => l.seller)).size), icon: Users },
+              { label: "Fair Splits Paid", value: String(listings.length), icon: Shield }
             ].map((stat, index) => (
               <div 
                 key={index}
@@ -197,6 +197,11 @@ export function MarketplacePage() {
                 <div key={i} className="h-32 bg-[#131615] border border-[#262b2a] rounded-2xl animate-pulse" />
               ))}
             </div>
+          ) : listings.length === 0 ? (
+            <div className="p-8 bg-[#131615] border border-[#262b2a] rounded-2xl text-center">
+              <p className="text-[#87928e] font-['Inter:Medium',sans-serif] text-lg mb-2">No tickets listed for resale yet.</p>
+              <p className="text-[#87928e] text-sm font-['Inter:Regular',sans-serif]">When someone lists a ticket, it will appear here.</p>
+            </div>
           ) : (
           <div className="space-y-4">
             {listings.map((listing, index) => (
@@ -286,13 +291,13 @@ export function MarketplacePage() {
                       </div>
                     </div>
                     
-                    {/* CTA - primary purchase for now; resale buy_listing flow can use listing.id */}
-                    <Link 
-                      to={`/purchase/1`}
+                    {/* CTA */}
+                    <button
                       className="bg-[#32b377] hover:bg-[#2a9865] transition-all px-8 py-3.5 rounded-xl font-['Inter:Medium',sans-serif] text-[#090b0b] shadow-lg hover:shadow-[0_0_20px_rgba(50,179,119,0.3)] whitespace-nowrap"
+                      onClick={() => alert(`Contact seller ${listing.seller} to purchase this ${listing.event} ticket for ${listing.currentPrice} SOL. On-chain resale settlement coming soon!`)}
                     >
                       Buy Now
-                    </Link>
+                    </button>
                   </div>
                 </div>
                 
