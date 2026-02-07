@@ -13,6 +13,7 @@ node_modules/
 dist/
 *.local
 .pnpm-store/
+.env
 
 # Solana / Anchor build artifacts
 backend/program/target/
