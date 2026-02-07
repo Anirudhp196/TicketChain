@@ -15,7 +15,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
 import { TrendingUp, TrendingDown, Clock, Shield, Star, DollarSign, Users, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';

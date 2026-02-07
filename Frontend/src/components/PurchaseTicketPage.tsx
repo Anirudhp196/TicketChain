@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
 import { Calendar, MapPin, Shield, Check, Wallet, ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';

@@ -14,7 +14,7 @@
  * - One-click listing with confirmation
  */
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
 import { Wallet, TrendingUp, Shield, DollarSign, ArrowLeft, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';

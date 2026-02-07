@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
 import { Calendar, MapPin, Users, Star, TrendingUp, Search, Filter } from 'lucide-react';
 import { Link } from 'react-router-dom';

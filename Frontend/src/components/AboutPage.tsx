@@ -15,7 +15,7 @@
  * - Bold typography for key statements
  */
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
 import { Check, X, Shield, Zap, Users, Lock, TrendingUp, Code } from 'lucide-react';
 import { useEffect } from 'react';

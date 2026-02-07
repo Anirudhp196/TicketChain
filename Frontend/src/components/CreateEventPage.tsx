@@ -7,7 +7,7 @@
  * - Build + sign + submit create_event transaction via Anchor
  */
 
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
 import { Calendar, MapPin, DollarSign, Shield, Check, Wallet, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
