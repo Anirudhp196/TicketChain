@@ -9,12 +9,6 @@ services:
     envVars:
       - key: SOLANA_RPC_URL
         value: https://api.devnet.solana.com
-      - key: DATA_PATH
-        value: /data/data.json
-    disk:
-      name: ticketchain-data
-      mountPath: /data
-      sizeGB: 1
 
   - type: web
     name: ticketchain-frontend
