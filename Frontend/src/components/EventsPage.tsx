@@ -9,7 +9,7 @@
  * - Data from API client (mock until backend)
  * 
  * Engagement Strategy:
- * - High-quality concert imagery
+ * - High-quality event imagery
  * - Clear CTAs on each card
  * - Price and availability prominently displayed
  * - Loyalty badge indicators for early access
@@ -52,7 +52,7 @@ export function EventsPage() {
     const maxPrice = filters.maxPrice ? Number(filters.maxPrice) : null;
 
     const filtered = allEvents.filter((e) => {
-      const inQuery = !q || [e.title, e.artist, e.location].some((s) => String(s).toLowerCase().includes(q));
+      const inQuery = !q || [e.title, e.organizer, e.location].some((s) => String(s).toLowerCase().includes(q));
       if (!inQuery) return false;
       if (loc && !String(e.location).toLowerCase().includes(loc)) return false;
       if (minAvail != null && !Number.isNaN(minAvail) && (Number(e.available ?? 0) < minAvail)) return false;
@@ -79,7 +79,7 @@ export function EventsPage() {
               Discover <span className="text-[#32b377]">Live Events</span>
             </h1>
             <p className="text-[#87928e] text-xl font-['Inter:Regular',sans-serif] max-w-2xl">
-              Browse upcoming concerts, sports, festivals, and more. All tickets are NFTs on Solana - fraud-proof, transferable, and fair.
+              Browse upcoming events, sports, festivals, and more. All tickets are NFTs on Solana - fraud-proof, transferable, and fair.
             </p>
           </motion.div>
           
@@ -96,7 +96,7 @@ export function EventsPage() {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search events, artists, venues..."
+                placeholder="Search events, organizers, venues..."
                 className="w-full bg-[rgba(38,43,42,0.5)] border border-[#262b2a] rounded-xl pl-12 pr-4 py-3.5 text-[#fafaf9] placeholder-[#87928e] focus:border-[#32b377] focus:outline-none transition-colors font-['Inter:Regular',sans-serif]"
               />
             </div>
@@ -164,7 +164,7 @@ export function EventsPage() {
                 className="bg-[#131615] border border-[#262b2a] rounded-2xl overflow-hidden hover:border-[#32b377] transition-all group"
               >
                 <div className="block">
-                {/* Event Image - Using unsplash for real concert photos */}
+                {/* Event Image - Using unsplash for real event photos */}
                 <div className="relative h-48 bg-gradient-to-br from-[#32b377] to-[#1a6a4a] overflow-hidden">
                   <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all" />
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -210,7 +210,7 @@ export function EventsPage() {
                     {event.title}
                   </h3>
                   <p className="text-[#87928e] text-sm mb-4 font-['Inter:Medium',sans-serif]">
-                    {event.artist}
+                    {event.organizer}
                   </p>
                   
                   <div className="space-y-2 mb-5">
@@ -281,13 +281,13 @@ export function EventsPage() {
               Can't find your event?
             </h2>
             <p className="text-[#87928e] text-lg mb-8 font-['Inter:Regular',sans-serif]">
-              Artists and organizers can create events and mint tickets in minutes. No middlemen, no delays.
+              Organizers can create events and mint tickets in minutes. No middlemen, no delays.
             </p>
             <Link 
               to="/create-event"
               className="bg-[#32b377] hover:bg-[#2a9865] transition-all px-8 py-4 rounded-xl font-['Inter:Medium',sans-serif] text-[#090b0b] shadow-lg hover:shadow-[0_0_20px_rgba(50,179,119,0.3)]"
             >
-              Create Event as Artist
+              Create Event as Organizer
             </Link>
           </motion.div>
         </div>

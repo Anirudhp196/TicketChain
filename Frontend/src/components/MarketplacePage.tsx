@@ -228,7 +228,7 @@ export function MarketplacePage() {
                           )}
                         </div>
                         <p className="text-[#87928e] text-sm mb-3 font-['Inter:Medium',sans-serif]">
-                          {listing.artist}
+                          {listing.organizer}
                         </p>
                         
                         <div className="flex flex-wrap items-center gap-4 text-sm text-[#87928e]">

@@ -1011,7 +1011,7 @@ function Footer() {
 function Container47() {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
-      <div className="flex flex-col font-['Space_Grotesk:Bold',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#090b0b] text-[0px] text-left whitespace-nowrap" role="link" tabIndex="0">
+      <div className="flex flex-col font-['Space_Grotesk:Bold',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#090b0b] text-[0px] text-left whitespace-nowrap" role="link" tabIndex={0}>
         <p className="cursor-pointer leading-[20px] text-[14px]">M</p>
       </div>
     </div>
@@ -1029,7 +1029,7 @@ function Background1() {
 function Container48() {
   return (
     <div className="content-stretch flex flex-col items-start relative shrink-0" data-name="Container">
-      <div className="flex flex-col font-['Space_Grotesk:Bold',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#fafaf9] text-[0px] text-left whitespace-nowrap" role="link" tabIndex="0">
+      <div className="flex flex-col font-['Space_Grotesk:Bold',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#fafaf9] text-[0px] text-left whitespace-nowrap" role="link" tabIndex={0}>
         <p className="cursor-pointer leading-[28px] text-[20px]">Matcha</p>
       </div>
     </div>

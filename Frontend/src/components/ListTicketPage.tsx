@@ -68,7 +68,7 @@ export function ListTicketPage() {
 
     const newListing = await createListing({
       event: ticket.event,
-      artist: ticket.artist,
+      organizer: ticket.organizer,
       originalPrice: original,
       currentPrice,
       seller,
@@ -163,7 +163,7 @@ export function ListTicketPage() {
                               {t.event}
                             </h3>
                             <p className="text-[#87928e] text-sm mb-3 font-['Inter:Medium',sans-serif]">
-                              {t.artist} • {t.date}
+                              {t.organizer} • {t.date}
                             </p>
                             <div className="flex items-center gap-4 text-sm">
                               <span className="text-[#87928e] font-['Inter:Regular',sans-serif]">

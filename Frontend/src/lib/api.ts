@@ -40,12 +40,12 @@ async function apiFetch(path: string, options?: RequestInit): Promise<Response> 
 
 // Mock events used until backend is available (same as previous in-component mocks)
 const MOCK_EVENTS: Event[] = [
-  { id: 1, title: "Synthwave Sunset Festival", artist: "Neon Dreams", date: "March 15, 2026", location: "Los Angeles, CA", price: 0.5, available: 234, total: 500, status: "On Sale", loyaltyRequired: null, image: "concert electronic festival", type: "Concert" },
-  { id: 2, title: "Lakers vs Warriors", artist: "NBA", date: "March 22, 2026", location: "Los Angeles, CA", price: 0.8, available: 89, total: 300, status: "Almost Sold Out", loyaltyRequired: null, image: "basketball game arena", type: "Sports" },
-  { id: 3, title: "Ethereal Beats World Tour", artist: "DJ Aurora", date: "April 5, 2026", location: "Miami, FL", price: 0.8, available: 450, total: 1000, status: "Early Access", loyaltyRequired: "Gold", image: "electronic music concert lights", type: "Concert" },
-  { id: 4, title: "Comedy Night Live", artist: "Stand-Up Stars", date: "April 12, 2026", location: "Austin, TX", price: 0.4, available: 156, total: 250, status: "On Sale", loyaltyRequired: null, image: "comedy show stage", type: "Comedy" },
-  { id: 5, title: "World Cup Qualifier", artist: "FIFA", date: "April 20, 2026", location: "Boston, MA", price: 0.6, available: 320, total: 800, status: "On Sale", loyaltyRequired: null, image: "soccer stadium match", type: "Sports" },
-  { id: 6, title: "Hip Hop Block Party", artist: "MC Thunder & Friends", date: "May 1, 2026", location: "Atlanta, GA", price: 0.35, available: 12, total: 400, status: "Almost Sold Out", loyaltyRequired: null, image: "hip hop concert crowd", type: "Concert" },
+  { id: 1, title: "Synthwave Sunset Festival", organizer: "Neon Dreams", date: "March 15, 2026", location: "Los Angeles, CA", price: 0.5, available: 234, total: 500, status: "On Sale", loyaltyRequired: null, image: "concert electronic festival", type: "Concert" },
+  { id: 2, title: "Lakers vs Warriors", organizer: "NBA", date: "March 22, 2026", location: "Los Angeles, CA", price: 0.8, available: 89, total: 300, status: "Almost Sold Out", loyaltyRequired: null, image: "basketball game arena", type: "Sports" },
+  { id: 3, title: "Ethereal Beats World Tour", organizer: "DJ Aurora", date: "April 5, 2026", location: "Miami, FL", price: 0.8, available: 450, total: 1000, status: "Early Access", loyaltyRequired: "Gold", image: "electronic music concert lights", type: "Concert" },
+  { id: 4, title: "Comedy Night Live", organizer: "Stand-Up Stars", date: "April 12, 2026", location: "Austin, TX", price: 0.4, available: 156, total: 250, status: "On Sale", loyaltyRequired: null, image: "comedy show stage", type: "Comedy" },
+  { id: 5, title: "World Cup Qualifier", organizer: "FIFA", date: "April 20, 2026", location: "Boston, MA", price: 0.6, available: 320, total: 800, status: "On Sale", loyaltyRequired: null, image: "soccer stadium match", type: "Sports" },
+  { id: 6, title: "Hip Hop Block Party", organizer: "MC Thunder & Friends", date: "May 1, 2026", location: "Atlanta, GA", price: 0.35, available: 12, total: 400, status: "Almost Sold Out", loyaltyRequired: null, image: "hip hop concert crowd", type: "Concert" },
 ];
 
 async function getEventsFromApi(): Promise<Event[]> {
@@ -69,10 +69,10 @@ async function getEventFromApi(id: string): Promise<Event | null> {
 }
 
 const MOCK_LISTINGS: Listing[] = [
-  { id: 1, event: 'Synthwave Sunset Festival', artist: 'Neon Dreams', originalPrice: 0.5, currentPrice: 0.55, seller: '7a2f...3b4c', sellerRep: 'Gold', date: 'March 15, 2026', verified: true, priceChange: 10, listingAge: '2 hours ago' },
-  { id: 2, event: 'Jazz in the Park', artist: 'The Blue Notes Collective', originalPrice: 0.3, currentPrice: 0.28, seller: '9c4d...7e2a', sellerRep: 'Silver', date: 'March 22, 2026', verified: true, priceChange: -7, listingAge: '5 hours ago' },
-  { id: 3, event: 'Ethereal Beats World Tour', artist: 'DJ Aurora', originalPrice: 0.8, currentPrice: 0.82, seller: '3f8e...1d6b', sellerRep: 'Gold', date: 'April 5, 2026', verified: true, priceChange: 2.5, listingAge: '1 day ago' },
-  { id: 4, event: 'Indie Rock Underground', artist: 'The Echoes', originalPrice: 0.4, currentPrice: 0.41, seller: '6b2c...9f3e', sellerRep: 'Bronze', date: 'April 12, 2026', verified: true, priceChange: 2.5, listingAge: '3 hours ago' },
+  { id: 1, event: 'Synthwave Sunset Festival', organizer: 'Neon Dreams', originalPrice: 0.5, currentPrice: 0.55, seller: '7a2f...3b4c', sellerRep: 'Gold', date: 'March 15, 2026', verified: true, priceChange: 10, listingAge: '2 hours ago' },
+  { id: 2, event: 'Jazz in the Park', organizer: 'The Blue Notes Collective', originalPrice: 0.3, currentPrice: 0.28, seller: '9c4d...7e2a', sellerRep: 'Silver', date: 'March 22, 2026', verified: true, priceChange: -7, listingAge: '5 hours ago' },
+  { id: 3, event: 'Ethereal Beats World Tour', organizer: 'DJ Aurora', originalPrice: 0.8, currentPrice: 0.82, seller: '3f8e...1d6b', sellerRep: 'Gold', date: 'April 5, 2026', verified: true, priceChange: 2.5, listingAge: '1 day ago' },
+  { id: 4, event: 'Indie Rock Underground', organizer: 'The Echoes', originalPrice: 0.4, currentPrice: 0.41, seller: '6b2c...9f3e', sellerRep: 'Bronze', date: 'April 12, 2026', verified: true, priceChange: 2.5, listingAge: '3 hours ago' },
 ];
 // Frontend-local listings created during this session (takes precedence)
 const LOCAL_LISTINGS: Listing[] = [];
@@ -165,7 +165,7 @@ export async function confirmTicketPurchase(eventId: string, wallet: string, sig
       ticket: {
         id: `mock-${Date.now()}`,
         event: 'Mock Event',
-        artist: 'Mock Artist',
+        organizer: 'Mock Organizer',
         date: 'TBD',
         tier: 'General Admission',
         purchasePrice: 0,

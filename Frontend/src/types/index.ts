@@ -6,7 +6,7 @@
 export interface Event {
   id: number | string;
   title: string;
-  artist: string;
+  organizer: string;
   date: string;
   location: string;
   price: number; // SOL
@@ -24,7 +24,7 @@ export interface Event {
 export interface Ticket {
   id: number | string;
   event: string;
-  artist: string;
+  organizer: string;
   date: string;
   tier: string;
   purchasePrice: number;
@@ -36,7 +36,7 @@ export interface Ticket {
 export interface Listing {
   id: number | string;
   event: string;
-  artist: string;
+  organizer: string;
   originalPrice: number;
   currentPrice: number;
   seller: string;

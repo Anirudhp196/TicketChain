@@ -271,12 +271,12 @@ export function LandingPage() {
               {
                 number: "02",
                 title: "Choose Your Role",
-                description: "Sign up as an artist to create events and sell tickets, or fan to browse and buy."
+                description: "Sign up as an organizer to create events and sell tickets, or fan to browse and buy."
               },
               {
                 number: "03",
                 title: "Buy or Create Events",
-                description: "Artists set up events with ticket tiers and pricing. Fans purchase NFT tickets instantly."
+                description: "Organizers set up events with ticket tiers and pricing. Fans purchase NFT tickets instantly."
               },
               {
                 number: "04",
