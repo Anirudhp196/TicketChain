@@ -15,6 +15,7 @@ import {
   buildListForResaleTransaction,
   buildBuyResaleTransaction,
   buildCancelListingTransaction,
+  fetchAllEvents,
   fetchAllListings,
 } from './solana.js';
 
@@ -108,12 +109,83 @@ function findEventById(id) {
   return all.find((e) => String(e.id) === String(id));
 }
 
-app.get('/api/events', (_req, res) => {
-  res.json(getAllEvents());
+app.get('/api/events', async (_req, res) => {
+  try {
+    // Fetch all events directly from the Solana chain
+    const chainEvents = await fetchAllEvents();
+
+    // Convert on-chain events to the frontend shape, deduplicating with local records
+    const knownPubkeys = new Set([
+      ...onChainEvents.map((e) => e.eventPubkey),
+    ]);
+
+    const newFromChain = chainEvents
+      .filter((ce) => !knownPubkeys.has(ce.eventPubkey))
+      .map((ce, idx) => ({
+        id: `chain-${ce.eventPubkey.slice(0, 8)}`,
+        title: ce.title,
+        artist: 'On-chain Event',
+        date: ce.date,
+        location: ce.location,
+        price: ce.priceSol,
+        available: ce.available,
+        total: ce.supply,
+        status: ce.available === 0 ? 'Sold Out' : ce.available < 10 ? 'Almost Sold Out' : 'On Sale',
+        loyaltyRequired: null,
+        type: 'Concert',
+        tier: ce.tierName,
+        eventPubkey: ce.eventPubkey,
+        organizerPubkey: ce.organizerPubkey,
+      }));
+
+    // Also update local on-chain events with fresh sold/available from the chain
+    for (const ce of chainEvents) {
+      const local = onChainEvents.find((e) => e.eventPubkey === ce.eventPubkey);
+      if (local) {
+        local.available = ce.available;
+      }
+    }
+
+    res.json([...MOCK_EVENTS, ...onChainEvents, ...newFromChain]);
+  } catch (e) {
+    console.error('Failed to fetch on-chain events, falling back to local', e);
+    res.json(getAllEvents());
+  }
 });
 
-app.get('/api/events/:id', (req, res) => {
-  const event = findEventById(req.params.id);
+app.get('/api/events/:id', async (req, res) => {
+  const id = req.params.id;
+  // Check local first
+  let event = findEventById(id);
+
+  // If not found locally and id looks like a chain-derived id, try to find by eventPubkey
+  if (!event && id.startsWith('chain-')) {
+    try {
+      const chainEvents = await fetchAllEvents();
+      const ce = chainEvents.find((e) => `chain-${e.eventPubkey.slice(0, 8)}` === id);
+      if (ce) {
+        event = {
+          id,
+          title: ce.title,
+          artist: 'On-chain Event',
+          date: ce.date,
+          location: ce.location,
+          price: ce.priceSol,
+          available: ce.available,
+          total: ce.supply,
+          status: ce.available === 0 ? 'Sold Out' : ce.available < 10 ? 'Almost Sold Out' : 'On Sale',
+          loyaltyRequired: null,
+          type: 'Concert',
+          tier: ce.tierName,
+          eventPubkey: ce.eventPubkey,
+          organizerPubkey: ce.organizerPubkey,
+        };
+      }
+    } catch (e) {
+      console.error('Failed to fetch chain event by id', e);
+    }
+  }
+
   if (!event) return res.status(404).json({ error: 'Not found' });
   res.json({ ...event, tier: event.tier ?? 'General Admission' });
 });

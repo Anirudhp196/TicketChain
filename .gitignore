@@ -21,3 +21,6 @@ backend/program/.anchor/
 
 # Cargo lock (optional, regenerated from Cargo.toml)
 backend/program/Cargo.lock
+
+# Backend runtime data (changes on every purchase/event creation)
+backend/api/src/data.json

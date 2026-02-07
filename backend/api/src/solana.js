@@ -22,7 +22,8 @@ const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111');
 // Platform wallet receives 20% of resale proceeds
 const PLATFORM_WALLET = new PublicKey(process.env.PLATFORM_WALLET ?? 'GFxY452qfw5nwA4N9KQ28zZTmJL9CD1eenydHY9kEE32');
 
-// Listing account discriminator (first 8 bytes of sha256("account:Listing"))
+// Account discriminators (first 8 bytes of sha256("account:<Name>"))
+const EVENT_DISCRIMINATOR = Buffer.from([125, 192, 125, 158, 9, 115, 152, 233]);
 const LISTING_DISCRIMINATOR = Buffer.from([218, 32, 50, 73, 43, 134, 26, 58]);
 
 function getConnection() {
@@ -318,6 +319,78 @@ export async function buildCancelListingTransaction(sellerPubkey, ticketMintPubk
 
   const serialized = tx.serialize({ requireAllSignatures: false });
   return serialized.toString('base64');
+}
+
+/**
+ * Fetch all on-chain Event accounts using getProgramAccounts.
+ * Returns parsed event objects with all fields from the chain.
+ */
+export async function fetchAllEvents() {
+  const connection = getConnection();
+  const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
+    filters: [
+      { memcmp: { offset: 0, bytes: EVENT_DISCRIMINATOR.toString('base64'), encoding: 'base64' } },
+    ],
+  });
+
+  return accounts.map(({ pubkey, account }) => {
+    const data = account.data;
+    try {
+      const organizer = new PublicKey(data.slice(8, 40));
+      let offset = 40;
+      // nonce (u64)
+      offset += 8;
+      // title (String: 4-byte len prefix + utf8)
+      const titleLen = data.readUInt32LE(offset);
+      offset += 4;
+      const title = data.slice(offset, offset + titleLen).toString('utf8');
+      offset += titleLen;
+      // venue (String)
+      const venueLen = data.readUInt32LE(offset);
+      offset += 4;
+      const venue = data.slice(offset, offset + venueLen).toString('utf8');
+      offset += venueLen;
+      // date_ts (i64)
+      const dateTs = Number(data.readBigInt64LE(offset));
+      offset += 8;
+      // tier_name (String)
+      const tierNameLen = data.readUInt32LE(offset);
+      offset += 4;
+      const tierName = data.slice(offset, offset + tierNameLen).toString('utf8');
+      offset += tierNameLen;
+      // price_lamports (u64)
+      const priceLamports = Number(data.readBigUInt64LE(offset));
+      offset += 8;
+      // supply (u32)
+      const supply = data.readUInt32LE(offset);
+      offset += 4;
+      // sold (u32)
+      const sold = data.readUInt32LE(offset);
+
+      const dateStr = new Date(dateTs * 1000).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric',
+      });
+
+      return {
+        eventPubkey: pubkey.toBase58(),
+        organizerPubkey: organizer.toBase58(),
+        title,
+        venue,
+        dateTs,
+        tierName,
+        priceLamports,
+        priceSol: priceLamports / 1e9,
+        supply,
+        sold,
+        available: supply - sold,
+        date: dateStr,
+        location: venue,
+      };
+    } catch (e) {
+      console.error('Failed to parse event account', pubkey.toBase58(), e);
+      return null;
+    }
+  }).filter(Boolean);
 }
 
 /**
