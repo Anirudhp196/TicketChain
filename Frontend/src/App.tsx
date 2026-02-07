@@ -12,6 +12,8 @@
  */
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { SolanaProviders } from './components/SolanaProviders';
+import { WalletProvider } from './contexts/WalletContext';
 import { LandingPage } from './components/LandingPage';
 import { EventsPage } from './components/EventsPage';
 import { MarketplacePage } from './components/MarketplacePage';
@@ -22,7 +24,9 @@ import { ListTicketPage } from './components/ListTicketPage';
 
 export default function App() {
   return (
-    <Router>
+    <SolanaProviders>
+      <WalletProvider>
+        <Router>
       <Routes>
         {/* Main landing page - the wow factor entry point */}
         <Route path="/" element={<LandingPage />} />
@@ -45,6 +49,8 @@ export default function App() {
         {/* List tickets for resale */}
         <Route path="/list-ticket" element={<ListTicketPage />} />
       </Routes>
-    </Router>
+        </Router>
+      </WalletProvider>
+    </SolanaProviders>
   );
 }

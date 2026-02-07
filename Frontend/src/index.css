@@ -2018,3 +2018,9 @@ html {
     opacity: .5;
   }
 }
+
+/* Wallet adapter modal above nav (z-50) */
+.wallet-adapter-modal-wrapper,
+.wallet-adapter-modal {
+  z-index: 9999 !important;
+}
