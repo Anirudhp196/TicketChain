@@ -32,6 +32,7 @@ export function MyTicketsPage() {
   const [resalePrice, setResalePrice] = useState('');
   const [listing, setListing] = useState(false);
   const [listSuccess, setListSuccess] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!connected || !publicKey) return;
@@ -57,6 +58,7 @@ export function MyTicketsPage() {
     setResaleTicket(ticket);
     setResalePrice(ticket.suggestedPrice?.toString() ?? (ticket.purchasePrice * 1.1).toFixed(2));
     setListSuccess(false);
+    setModalError(null);
   }
 
   function closeResaleModal() {
@@ -64,21 +66,39 @@ export function MyTicketsPage() {
     setResalePrice('');
     setListing(false);
     setListSuccess(false);
+    setModalError(null);
   }
 
   async function handleListForResale() {
-    if (!resaleTicket || !publicKey || !wallet.signTransaction) return;
+    setModalError(null);
+
+    if (!resaleTicket) {
+      setModalError('No ticket selected.');
+      return;
+    }
+    if (!publicKey) {
+      setModalError('Wallet not connected. Please connect your wallet first.');
+      return;
+    }
+    if (!wallet.signTransaction) {
+      setModalError('Wallet does not support signing. Please reconnect your Phantom wallet.');
+      return;
+    }
     const priceSol = Number(resalePrice) || 0;
-    if (priceSol <= 0) return;
+    if (priceSol <= 0) {
+      setModalError('Please enter a valid price greater than 0.');
+      return;
+    }
 
     // Need eventPubkey and ticketMint to build the on-chain listing
     if (!resaleTicket.eventPubkey || !resaleTicket.ticketMint) {
-      setError('This ticket does not have on-chain data (eventPubkey/ticketMint). Only on-chain tickets can be listed for resale.');
+      setModalError(
+        'This ticket does not have on-chain data (eventPubkey/ticketMint). Only on-chain tickets can be listed for resale.'
+      );
       return;
     }
 
     setListing(true);
-    setError(null);
     try {
       // 1. Build the list_for_resale transaction via API
       const { transaction: txBase64 } = await listForResale(
@@ -96,7 +116,8 @@ export function MyTicketsPage() {
 
       setListSuccess(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to list ticket for resale');
+      console.error('List for resale failed:', e);
+      setModalError(e instanceof Error ? e.message : 'Failed to list ticket for resale');
     } finally {
       setListing(false);
     }
@@ -341,6 +362,13 @@ export function MyTicketsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Error display inside modal */}
+                  {modalError && (
+                    <div className="p-3 bg-[rgba(255,100,100,0.1)] border border-[rgba(255,100,100,0.3)] rounded-xl text-[#ff6464] text-sm font-['Inter:Medium',sans-serif]">
+                      {modalError}
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="flex gap-3 pt-2">

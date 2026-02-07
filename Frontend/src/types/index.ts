@@ -25,6 +25,7 @@ export interface Ticket {
   id: number | string;
   event: string;
   organizer: string;
+  artist?: string;
   date: string;
   tier: string;
   purchasePrice: number;
