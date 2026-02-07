@@ -203,7 +203,7 @@ export async function getEventAttendees(eventId: string): Promise<{ attendees: {
 export interface CreateListingArgs {
   ticketId?: string | number;
   event: string;
-  artist: string;
+  organizer: string;
   originalPrice: number;
   currentPrice: number;
   seller: string;
