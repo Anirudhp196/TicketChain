@@ -14,3 +14,7 @@ services:
         value: https://api.devnet.solana.com
       - key: NODE_VERSION
         value: 20
+      - key: SUPABASE_URL
+        sync: false  # set manually in Render dashboard
+      - key: SUPABASE_KEY
+        sync: false  # set manually in Render dashboard

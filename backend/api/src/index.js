@@ -2,13 +2,14 @@
  * TicketChain relay API
  * Proxies frontend requests to the Solana/Anchor program.
  * Returns serialized transactions for frontend to sign and submit.
+ *
+ * Data flow:
+ *   Chain (source of truth) -> Supabase (cache) -> API responses
+ *   If Supabase is not configured, falls back to direct chain reads + in-memory.
  */
 
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import {
   buildBuyTicketTransaction,
   buildCreateEventTransaction,
@@ -19,194 +20,161 @@ import {
   fetchAllEvents,
   fetchAllListings,
 } from './solana.js';
+import {
+  isEnabled as dbEnabled,
+  cacheEvents,
+  getCachedEvents,
+  getCachedEvent,
+  removeCachedEvent,
+  addPurchase,
+  getPurchasesByWallet,
+  getPurchasesByEvent,
+  getCachedListings,
+} from './db.js';
+import { startSync, syncFromChain } from './sync.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_PATH = process.env.DATA_PATH ?? join(__dirname, 'data.json');
 
 app.use(cors());
 app.use(express.json());
 
-// eventId (from our API) -> on-chain Event account pubkey (set when event is created via create_event)
-const eventIdToPubkey = new Map();
-
-// On-chain events created through the API (appended by POST /api/events after signing)
-const onChainEvents = [];
-let nextOnChainId = 100; // start IDs at 100 to avoid collision with mocks
-const purchases = [];
+// ── In-memory fallback (used when Supabase is not configured) ────────
+const inMemoryPurchases = [];
 let nextTicketId = 1;
-const userListings = [];
-let nextListingId = 1000;
 
-function loadData() {
-  if (!existsSync(DATA_PATH)) return;
-  try {
-    const raw = readFileSync(DATA_PATH, 'utf8');
-    const parsed = JSON.parse(raw);
-    const events = Array.isArray(parsed.onChainEvents) ? parsed.onChainEvents : [];
-    const savedPurchases = Array.isArray(parsed.purchases) ? parsed.purchases : [];
-    const savedListings = Array.isArray(parsed.userListings) ? parsed.userListings : [];
-    const savedNextOnChainId = Number(parsed.nextOnChainId);
-    const savedNextTicketId = Number(parsed.nextTicketId);
-    const savedNextListingId = Number(parsed.nextListingId);
-    const mapEntries = parsed.eventIdToPubkeyEntries ?? [];
-
-    onChainEvents.length = 0;
-    onChainEvents.push(...events);
-
-    purchases.length = 0;
-    purchases.push(...savedPurchases);
-
-    userListings.length = 0;
-    userListings.push(...savedListings);
-
-    if (!Number.isNaN(savedNextOnChainId)) nextOnChainId = savedNextOnChainId;
-    if (!Number.isNaN(savedNextTicketId)) nextTicketId = savedNextTicketId;
-    if (!Number.isNaN(savedNextListingId)) nextListingId = savedNextListingId;
-
-    eventIdToPubkey.clear();
-    if (Array.isArray(mapEntries)) {
-      mapEntries.forEach(([key, value]) => {
-        if (key && value) eventIdToPubkey.set(String(key), String(value));
-      });
-    }
-  } catch (err) {
-    console.error('Failed to load persisted data', err);
-  }
+// ── Helper: convert chain event to frontend shape ────────────────────
+function chainEventToFrontend(ce) {
+  return {
+    id: `chain-${ce.eventPubkey.slice(0, 8)}`,
+    title: ce.title,
+    artist: 'On-chain Event',
+    date: ce.date ?? ce.date_display,
+    location: ce.venue ?? ce.location,
+    price: ce.priceSol ?? (ce.price_sol != null ? Number(ce.price_sol) : 0),
+    available: ce.available,
+    total: ce.supply,
+    status: ce.available === 0 ? 'Sold Out' : ce.available < 10 ? 'Almost Sold Out' : 'On Sale',
+    loyaltyRequired: null,
+    type: 'Concert',
+    tier: ce.tierName ?? ce.tier_name ?? 'General Admission',
+    eventPubkey: ce.eventPubkey ?? ce.event_pubkey,
+    organizerPubkey: ce.organizerPubkey ?? ce.organizer_pubkey,
+  };
 }
 
-function saveData() {
-  try {
-    const payload = {
-      onChainEvents,
-      purchases,
-      userListings,
-      nextOnChainId,
-      nextTicketId,
-      nextListingId,
-      eventIdToPubkeyEntries: Array.from(eventIdToPubkey.entries()),
-    };
-    writeFileSync(DATA_PATH, JSON.stringify(payload, null, 2), 'utf8');
-  } catch (err) {
-    console.error('Failed to persist data', err);
-  }
-}
-
-loadData();
-
-function getAllEvents() {
-  return [...onChainEvents];
-}
-
-function findEventById(id) {
-  const all = getAllEvents();
-  return all.find((e) => String(e.id) === String(id));
-}
+// ── Events ───────────────────────────────────────────────────────────
 
 app.get('/api/events', async (_req, res) => {
   try {
-    // Fetch all events directly from the Solana chain
-    const chainEvents = await fetchAllEvents();
-
-    // Convert on-chain events to the frontend shape, deduplicating with local records
-    const knownPubkeys = new Set([
-      ...onChainEvents.map((e) => e.eventPubkey),
-    ]);
-
-    const newFromChain = chainEvents
-      .filter((ce) => !knownPubkeys.has(ce.eventPubkey))
-      .map((ce, idx) => ({
-        id: `chain-${ce.eventPubkey.slice(0, 8)}`,
-        title: ce.title,
-        artist: 'On-chain Event',
-        date: ce.date,
-        location: ce.location,
-        price: ce.priceSol,
-        available: ce.available,
-        total: ce.supply,
-        status: ce.available === 0 ? 'Sold Out' : ce.available < 10 ? 'Almost Sold Out' : 'On Sale',
-        loyaltyRequired: null,
-        type: 'Concert',
-        tier: ce.tierName,
-        eventPubkey: ce.eventPubkey,
-        organizerPubkey: ce.organizerPubkey,
+    // Try Supabase cache first
+    const cached = await getCachedEvents();
+    if (cached && cached.length > 0) {
+      const events = cached.map((row) => chainEventToFrontend({
+        eventPubkey: row.event_pubkey,
+        organizerPubkey: row.organizer_pubkey,
+        title: row.title,
+        venue: row.venue,
+        date: row.date_display,
+        tierName: row.tier_name,
+        priceSol: Number(row.price_sol),
+        supply: row.supply,
+        sold: row.sold,
+        available: row.available,
       }));
-
-    // Also update local on-chain events with fresh sold/available from the chain
-    for (const ce of chainEvents) {
-      const local = onChainEvents.find((e) => e.eventPubkey === ce.eventPubkey);
-      if (local) {
-        local.available = ce.available;
-      }
+      return res.json(events);
     }
 
-    res.json([...MOCK_EVENTS, ...onChainEvents, ...newFromChain]);
+    // Fallback: read directly from chain
+    const chainEvents = await fetchAllEvents();
+    const events = chainEvents.map(chainEventToFrontend);
+    res.json(events);
   } catch (e) {
-    console.error('Failed to fetch on-chain events, falling back to local', e);
-    res.json(getAllEvents());
+    console.error('GET /api/events failed:', e.message);
+    res.json([]);
   }
 });
 
 app.get('/api/events/:id', async (req, res) => {
   const id = req.params.id;
-  // Check local first
-  let event = findEventById(id);
 
-  // If not found locally and id looks like a chain-derived id, try to find by eventPubkey
-  if (!event && id.startsWith('chain-')) {
-    try {
+  try {
+    // If it's a chain-derived ID, extract the pubkey prefix
+    if (id.startsWith('chain-')) {
+      const pubkeyPrefix = id.slice(6); // e.g. "chain-AbCd1234" -> "AbCd1234"
+
+      // Try Supabase cache
+      const cached = await getCachedEvents();
+      if (cached) {
+        const match = cached.find((r) => r.event_pubkey.startsWith(pubkeyPrefix));
+        if (match) {
+          const event = chainEventToFrontend({
+            eventPubkey: match.event_pubkey,
+            organizerPubkey: match.organizer_pubkey,
+            title: match.title,
+            venue: match.venue,
+            date: match.date_display,
+            tierName: match.tier_name,
+            priceSol: Number(match.price_sol),
+            supply: match.supply,
+            sold: match.sold,
+            available: match.available,
+          });
+          return res.json({ ...event, tier: event.tier ?? 'General Admission' });
+        }
+      }
+
+      // Fallback: chain
       const chainEvents = await fetchAllEvents();
       const ce = chainEvents.find((e) => `chain-${e.eventPubkey.slice(0, 8)}` === id);
       if (ce) {
-        event = {
-          id,
-          title: ce.title,
-          artist: 'On-chain Event',
-          date: ce.date,
-          location: ce.location,
-          price: ce.priceSol,
-          available: ce.available,
-          total: ce.supply,
-          status: ce.available === 0 ? 'Sold Out' : ce.available < 10 ? 'Almost Sold Out' : 'On Sale',
-          loyaltyRequired: null,
-          type: 'Concert',
-          tier: ce.tierName,
-          eventPubkey: ce.eventPubkey,
-          organizerPubkey: ce.organizerPubkey,
-        };
+        const event = chainEventToFrontend(ce);
+        return res.json({ ...event, tier: event.tier ?? 'General Admission' });
       }
-    } catch (e) {
-      console.error('Failed to fetch chain event by id', e);
     }
-  }
 
-  if (!event) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...event, tier: event.tier ?? 'General Admission' });
+    // Not a chain ID — could be a numeric ID from a previous session
+    // Try looking up by numeric ID in Supabase purchases or just check chain
+    const chainEvents = await fetchAllEvents();
+    const byPubkey = chainEvents.find((e) => e.eventPubkey === id);
+    if (byPubkey) {
+      const event = chainEventToFrontend(byPubkey);
+      return res.json({ ...event, tier: event.tier ?? 'General Admission' });
+    }
+
+    return res.status(404).json({ error: 'Not found' });
+  } catch (e) {
+    console.error('GET /api/events/:id failed:', e.message);
+    return res.status(500).json({ error: 'Failed to fetch event' });
+  }
 });
 
-app.get('/api/events/:id/attendees', (req, res) => {
-  const event = findEventById(req.params.id);
-  if (!event) return res.status(404).json({ error: 'Not found' });
-  const attendees = purchases
-    .filter((p) => String(p.eventId) === String(req.params.id))
-    .reduce((acc, purchase) => {
-      const existing = acc.get(purchase.wallet);
-      acc.set(purchase.wallet, {
-        wallet: purchase.wallet,
-        tickets: (existing?.tickets ?? 0) + 1,
-      });
+app.get('/api/events/:id/attendees', async (req, res) => {
+  const eventId = req.params.id;
+
+  try {
+    // Try Supabase
+    const dbPurchases = await getPurchasesByEvent(eventId);
+    const purchaseList = dbPurchases ?? inMemoryPurchases.filter((p) => String(p.eventId) === String(eventId));
+
+    const attendees = purchaseList.reduce((acc, purchase) => {
+      const w = purchase.wallet;
+      const existing = acc.get(w);
+      acc.set(w, { wallet: w, tickets: (existing?.tickets ?? 0) + 1 });
       return acc;
     }, new Map());
-  res.json({
-    eventId: event.id,
-    eventTitle: event.title,
-    attendees: Array.from(attendees.values()),
-  });
+
+    res.json({
+      eventId,
+      attendees: Array.from(attendees.values()),
+    });
+  } catch (e) {
+    console.error('GET /api/events/:id/attendees failed:', e.message);
+    res.json({ eventId, attendees: [] });
+  }
 });
 
-// Create event: build create_event tx. Body: { organizerPubkey, title, venue, dateTs, tierName, priceLamports, supply }
-// Event keypair is generated server-side and pre-signed; frontend only signs for organizer wallet.
+// Create event: build create_event tx
 app.post('/api/events', async (req, res) => {
   const { organizerPubkey, title, venue, dateTs, tierName, priceLamports, supply } = req.body ?? {};
   if (!organizerPubkey || !title || !venue || priceLamports == null || !supply) {
@@ -227,41 +195,32 @@ app.post('/api/events', async (req, res) => {
       supply: supplyNum,
     });
 
-    const eventId = nextOnChainId++;
-    eventIdToPubkey.set(String(eventId), eventPubkey);
-
-    // Add to in-memory events list so it appears in GET /api/events
+    // Cache the new event in Supabase immediately
     const dateStr = new Date(dateTsNum * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    onChainEvents.push({
-      id: eventId,
-      title,
-      artist: 'On-chain Event',
-      date: dateStr,
-      location: venue,
-      price: priceLamportsNum / 1e9,
-      available: supplyNum,
-      total: supplyNum,
-      status: 'On Sale',
-      loyaltyRequired: null,
-      type: 'Concert',
-      tier,
+    await cacheEvents([{
       eventPubkey,
       organizerPubkey,
-    });
+      title,
+      venue,
+      dateTs: dateTsNum,
+      tierName: tier,
+      priceLamports: priceLamportsNum,
+      priceSol: priceLamportsNum / 1e9,
+      supply: supplyNum,
+      sold: 0,
+      available: supplyNum,
+      date: dateStr,
+      location: venue,
+    }]);
 
-    saveData();
-    res.json({ transaction, eventPubkey, eventId });
+    res.json({ transaction, eventPubkey, eventId: `chain-${eventPubkey.slice(0, 8)}` });
   } catch (e) {
     console.error('create_event build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build create_event transaction' });
   }
 });
 
-/**
- * DELETE /api/events — build close_event transaction.
- * Body: { organizerPubkey, eventPubkey }
- * Only the original organizer can close (delete) an event.
- */
+// Delete event: build close_event tx
 app.delete('/api/events', async (req, res) => {
   const { organizerPubkey, eventPubkey } = req.body ?? {};
   if (!organizerPubkey || !eventPubkey) {
@@ -270,13 +229,8 @@ app.delete('/api/events', async (req, res) => {
   try {
     const transaction = await buildCloseEventTransaction(organizerPubkey, eventPubkey);
 
-    // Also remove from local in-memory list if present
-    const idx = onChainEvents.findIndex((e) => e.eventPubkey === eventPubkey);
-    if (idx !== -1) onChainEvents.splice(idx, 1);
-    eventIdToPubkey.forEach((val, key) => {
-      if (val === eventPubkey) eventIdToPubkey.delete(key);
-    });
-    saveData();
+    // Remove from Supabase cache
+    await removeCachedEvent(eventPubkey);
 
     res.json({ transaction, message: 'Sign and submit to delete the event. Rent SOL will be returned.' });
   } catch (e) {
@@ -285,16 +239,39 @@ app.delete('/api/events', async (req, res) => {
   }
 });
 
-// Buy ticket: build buy_ticket tx if we have an on-chain event; else return mock.
+// ── Tickets ──────────────────────────────────────────────────────────
+
 app.post('/api/tickets/buy', async (req, res) => {
   const { eventId, eventPubkey, wallet, tier } = req.body ?? {};
   if (!wallet) return res.status(400).json({ error: 'Missing wallet' });
-  // Look up on-chain pubkey: from body, from id->pubkey map, or from the event object itself
-  let eventPk = eventPubkey ?? (eventId != null ? eventIdToPubkey.get(String(eventId)) : null);
-  if (!eventPk && eventId != null) {
-    const ev = onChainEvents.find((e) => String(e.id) === String(eventId));
-    if (ev?.eventPubkey) eventPk = ev.eventPubkey;
+
+  // Resolve eventPubkey from various sources
+  let eventPk = eventPubkey ?? null;
+
+  if (!eventPk && eventId) {
+    // Try to find in Supabase cache or chain
+    const cached = await getCachedEvents();
+    if (cached) {
+      const match = cached.find((r) =>
+        r.event_pubkey.startsWith(eventId.replace('chain-', '')) ||
+        `chain-${r.event_pubkey.slice(0, 8)}` === eventId
+      );
+      if (match) eventPk = match.event_pubkey;
+    }
+
+    // Fallback: search chain
+    if (!eventPk) {
+      try {
+        const chainEvents = await fetchAllEvents();
+        const match = chainEvents.find((e) =>
+          `chain-${e.eventPubkey.slice(0, 8)}` === eventId ||
+          e.eventPubkey === eventId
+        );
+        if (match) eventPk = match.eventPubkey;
+      } catch (_) {}
+    }
   }
+
   if (eventPk) {
     try {
       const transaction = await buildBuyTicketTransaction(eventPk, wallet);
@@ -304,126 +281,195 @@ app.post('/api/tickets/buy', async (req, res) => {
       return res.status(400).json({ error: e.message ?? 'Failed to build buy_ticket transaction' });
     }
   }
-  const signature = `mock-${eventId ?? '?'}-${Date.now()}`;
-  res.json({ signature, message: `Mock purchase (no on-chain event for this id). Create an event first to get a real transaction.` });
+
+  res.status(400).json({ error: 'Could not find event. Create an on-chain event first.' });
 });
 
-// Confirm purchase after wallet signs and submits the tx.
 app.post('/api/tickets/confirm', async (req, res) => {
   const { eventId, wallet, signature } = req.body ?? {};
   if (!eventId || !wallet || !signature) {
     return res.status(400).json({ error: 'Missing eventId, wallet, or signature' });
   }
 
-  const event = findEventById(eventId);
-  if (!event) return res.status(404).json({ error: 'Event not found' });
+  try {
+    // Find event metadata (from cache or chain)
+    let eventTitle = 'On-chain Event';
+    let eventArtist = 'On-chain Event';
+    let eventDate = 'TBD';
+    let eventTier = 'General Admission';
+    let eventPrice = 0;
+    let eventPk = null;
 
-  // Determine which ticket mint this purchase corresponds to.
-  // The mint PDA is: seeds = [b"ticket_mint", event_pubkey, sold_le_bytes]
-  // 'sold' is the ticket index at time of purchase (before incrementing).
-  const eventPk = event.eventPubkey ?? eventIdToPubkey.get(String(eventId));
-  let ticketMint = null;
-  if (eventPk) {
-    // Try to derive the ticket mint from the pre-purchase sold count
-    try {
-      const { PublicKey } = await import('@solana/web3.js');
-      const eventPkObj = new PublicKey(eventPk);
-      // sold index = total - available (approximation; the on-chain sold was used at buy time)
-      // We use the current purchase count for this event as the index
-      const purchaseIndex = purchases.filter(p => String(p.eventId) === String(eventId)).length;
-      const soldBuf = Buffer.alloc(4);
-      soldBuf.writeUInt32LE(purchaseIndex, 0);
-      const [mintPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from('ticket_mint'), eventPkObj.toBuffer(), soldBuf],
-        new PublicKey('BxjzLBTGVQYHRAC5NBGvyn9r6V7GfVHWUExFcJbRoCts')
+    // Try Supabase cache
+    const cached = await getCachedEvents();
+    if (cached) {
+      const match = cached.find((r) =>
+        `chain-${r.event_pubkey.slice(0, 8)}` === String(eventId) ||
+        r.event_pubkey === String(eventId)
       );
-      ticketMint = mintPda.toBase58();
-    } catch (e) {
-      console.error('Failed to derive ticket mint PDA', e);
+      if (match) {
+        eventTitle = match.title;
+        eventDate = match.date_display;
+        eventTier = match.tier_name ?? 'General Admission';
+        eventPrice = Number(match.price_sol);
+        eventPk = match.event_pubkey;
+      }
     }
+
+    // Fallback: chain
+    if (!eventPk) {
+      try {
+        const chainEvents = await fetchAllEvents();
+        const ce = chainEvents.find((e) =>
+          `chain-${e.eventPubkey.slice(0, 8)}` === String(eventId) ||
+          e.eventPubkey === String(eventId)
+        );
+        if (ce) {
+          eventTitle = ce.title;
+          eventDate = ce.date;
+          eventTier = ce.tierName ?? 'General Admission';
+          eventPrice = ce.priceSol;
+          eventPk = ce.eventPubkey;
+        }
+      } catch (_) {}
+    }
+
+    // Derive ticket mint PDA
+    let ticketMint = null;
+    if (eventPk) {
+      try {
+        const { PublicKey } = await import('@solana/web3.js');
+        const eventPkObj = new PublicKey(eventPk);
+
+        // Get purchase count for this event to determine sold index
+        const dbPurchases = await getPurchasesByEvent(eventId);
+        const purchaseCount = dbPurchases
+          ? dbPurchases.length
+          : inMemoryPurchases.filter((p) => String(p.eventId) === String(eventId)).length;
+
+        const soldBuf = Buffer.alloc(4);
+        soldBuf.writeUInt32LE(purchaseCount, 0);
+        const [mintPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('ticket_mint'), eventPkObj.toBuffer(), soldBuf],
+          new PublicKey('BxjzLBTGVQYHRAC5NBGvyn9r6V7GfVHWUExFcJbRoCts')
+        );
+        ticketMint = mintPda.toBase58();
+      } catch (e) {
+        console.error('Failed to derive ticket mint PDA', e);
+      }
+    }
+
+    const ticket = {
+      id: nextTicketId++,
+      eventId,
+      event: eventTitle,
+      artist: eventArtist,
+      date: eventDate,
+      tier: eventTier,
+      purchasePrice: eventPrice,
+      suggestedPrice: eventPrice ? Number((eventPrice * 1.1).toFixed(2)) : 0,
+      eventPubkey: eventPk,
+      ticketMint,
+      wallet,
+      signature,
+      purchasedAt: new Date().toISOString(),
+    };
+
+    // Write to Supabase + in-memory fallback
+    await addPurchase(ticket);
+    inMemoryPurchases.push(ticket);
+
+    res.json({ ticket });
+  } catch (e) {
+    console.error('POST /api/tickets/confirm failed:', e.message);
+    res.status(500).json({ error: 'Failed to confirm purchase' });
   }
-
-  const ticket = {
-    id: nextTicketId++,
-    eventId: event.id,
-    event: event.title,
-    artist: event.artist ?? 'Unknown',
-    date: event.date,
-    tier: event.tier ?? 'General Admission',
-    purchasePrice: event.price,
-    suggestedPrice: event.price ? Number((event.price * 1.1).toFixed(2)) : 0,
-    eventPubkey: eventPk ?? null,
-    ticketMint,
-    wallet,
-    signature,
-    purchasedAt: new Date().toISOString(),
-  };
-  purchases.push(ticket);
-
-  const onChainEvent = onChainEvents.find((e) => String(e.id) === String(eventId));
-  if (onChainEvent && typeof onChainEvent.available === 'number') {
-    onChainEvent.available = Math.max(onChainEvent.available - 1, 0);
-  }
-
-  saveData();
-  res.json({ ticket });
 });
 
-app.get('/api/tickets', (req, res) => {
+app.get('/api/tickets', async (req, res) => {
   const wallet = req.query.wallet;
   if (!wallet) return res.status(400).json({ error: 'Missing wallet' });
-  const owned = purchases.filter((p) => p.wallet === wallet);
-  res.json(owned);
+
+  try {
+    // Try Supabase
+    const dbTickets = await getPurchasesByWallet(wallet);
+    if (dbTickets) return res.json(dbTickets);
+
+    // Fallback: in-memory
+    const owned = inMemoryPurchases.filter((p) => p.wallet === wallet);
+    res.json(owned);
+  } catch (e) {
+    console.error('GET /api/tickets failed:', e.message);
+    res.json([]);
+  }
 });
 
-// ── Resale Listings (on-chain) ────────────────────────────────────────
+// ── Resale Listings ──────────────────────────────────────────────────
 
-/**
- * GET /api/listings — fetch all on-chain Listing accounts and enrich with event metadata.
- */
 app.get('/api/listings', async (_req, res) => {
   try {
-    const onChainListings = await fetchAllListings();
+    // Try Supabase cache for listings
+    const cachedListings = await getCachedListings();
+    const cachedEvents = await getCachedEvents();
 
-    // Enrich each listing with event metadata from our in-memory event store
+    // If we have cached data, use it
+    if (cachedListings && cachedListings.length > 0) {
+      const enriched = cachedListings.map((l) => {
+        const ev = cachedEvents?.find((e) => e.event_pubkey === l.event_pubkey);
+        const sellerShort = l.seller.slice(0, 6) + '...' + l.seller.slice(-4);
+        const priceSol = Number(l.price_sol);
+        const evPrice = ev ? Number(ev.price_sol) : 0;
+        return {
+          id: l.listing_pubkey,
+          ticketMint: l.ticket_mint,
+          event: ev?.title ?? 'On-chain Event',
+          artist: 'On-chain Event',
+          originalPrice: evPrice,
+          currentPrice: priceSol,
+          seller: sellerShort,
+          sellerWallet: l.seller,
+          sellerRep: 'Bronze',
+          date: ev?.date_display ?? 'TBD',
+          verified: true,
+          priceChange: evPrice ? Math.round(((priceSol - evPrice) / evPrice) * 100) : 0,
+          listingAge: 'On-chain',
+          eventPubkey: l.event_pubkey,
+        };
+      });
+      return res.json(enriched);
+    }
+
+    // Fallback: read directly from chain
+    const onChainListings = await fetchAllListings();
+    const chainEvents = await fetchAllEvents();
+
     const enriched = onChainListings.map((l) => {
-      // Find matching event in our records
-      const ev = getAllEvents().find(
-        (e) => e.eventPubkey === l.event
-      );
+      const ev = chainEvents.find((e) => e.eventPubkey === l.event);
       const sellerShort = l.seller.slice(0, 6) + '...' + l.seller.slice(-4);
       return {
         id: l.pubkey,
         ticketMint: l.ticketMint,
         event: ev?.title ?? 'On-chain Event',
-        artist: ev?.artist ?? 'Unknown',
-        originalPrice: ev?.price ?? 0,
+        artist: 'On-chain Event',
+        originalPrice: ev?.priceSol ?? 0,
         currentPrice: l.priceSol,
         seller: sellerShort,
         sellerWallet: l.seller,
         sellerRep: 'Bronze',
         date: ev?.date ?? 'TBD',
         verified: true,
-        priceChange: ev?.price ? Math.round(((l.priceSol - ev.price) / ev.price) * 100) : 0,
+        priceChange: ev?.priceSol ? Math.round(((l.priceSol - ev.priceSol) / ev.priceSol) * 100) : 0,
         listingAge: 'On-chain',
         eventPubkey: l.event,
       };
     });
-
-    // Also include local user listings (from before on-chain was wired)
-    const combined = [...enriched, ...userListings];
-    res.json(combined);
+    res.json(enriched);
   } catch (e) {
-    console.error('Failed to fetch on-chain listings', e);
-    // Fallback to local listings if chain read fails
-    res.json(userListings);
+    console.error('GET /api/listings failed:', e.message);
+    res.json([]);
   }
 });
 
-/**
- * POST /api/listings — build list_for_resale transaction.
- * Body: { sellerWallet, eventPubkey, ticketMint, priceSol }
- */
 app.post('/api/listings', async (req, res) => {
   const { sellerWallet, eventPubkey, ticketMint, priceSol } = req.body ?? {};
   if (!sellerWallet || !eventPubkey || !ticketMint || priceSol == null) {
@@ -434,10 +480,7 @@ app.post('/api/listings', async (req, res) => {
   try {
     const priceLamports = Math.round(Number(priceSol) * 1e9);
     const { transaction, listingPubkey } = await buildListForResaleTransaction(
-      sellerWallet,
-      eventPubkey,
-      ticketMint,
-      priceLamports
+      sellerWallet, eventPubkey, ticketMint, priceLamports
     );
     res.json({ transaction, listingPubkey });
   } catch (e) {
@@ -446,10 +489,6 @@ app.post('/api/listings', async (req, res) => {
   }
 });
 
-/**
- * POST /api/listings/buy — build buy_resale transaction.
- * Body: { buyerWallet, ticketMint }
- */
 app.post('/api/listings/buy', async (req, res) => {
   const { buyerWallet, ticketMint } = req.body ?? {};
   if (!buyerWallet || !ticketMint) {
@@ -464,10 +503,6 @@ app.post('/api/listings/buy', async (req, res) => {
   }
 });
 
-/**
- * DELETE /api/listings — build cancel_listing transaction.
- * Body: { sellerWallet, ticketMint }
- */
 app.delete('/api/listings', async (req, res) => {
   const { sellerWallet, ticketMint } = req.body ?? {};
   if (!sellerWallet || !ticketMint) {
@@ -482,6 +517,10 @@ app.delete('/api/listings', async (req, res) => {
   }
 });
 
+// ── Start server + sync ──────────────────────────────────────────────
+
 app.listen(PORT, () => {
   console.log(`TicketChain API listening on http://localhost:${PORT}`);
+  // Start the periodic chain -> Supabase sync
+  startSync();
 });
