@@ -10,7 +10,7 @@
  * Design Approach:
  * - Show owned tickets from wallet
  * - Price suggestion based on market
- * - Clear 40/40/20 split visualization
+ * - Clear custom resale split visualization
  * - One-click listing with confirmation
  */
 

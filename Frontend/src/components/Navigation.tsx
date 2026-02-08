@@ -12,6 +12,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import svgPaths from '../imports/svg-y53m400yen';
 import { useWallet, shortenAddress } from '../contexts/WalletContext';
+import logoImg from './assets/dalogonew.png';
 
 export function Navigation() {
   const location = useLocation();
@@ -23,9 +24,7 @@ export function Navigation() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[rgba(9,11,11,0.8)] backdrop-blur-xl border-b border-[#262b2a]">
       <div className="max-w-[1512px] mx-auto px-8 py-4 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 bg-[#32b377] rounded-full flex items-center justify-center transition-transform group-hover:scale-110">
-            <span className="text-[#090b0b] font-bold">T</span>
-          </div>
+          <img src={logoImg} alt="TicketChain" className="h-8 w-auto transition-transform group-hover:scale-110 object-contain" />
           <span className="text-[#fafaf9] font-['Space_Grotesk:Bold',sans-serif] text-xl">
             TicketChain
           </span>
