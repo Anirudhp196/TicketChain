@@ -9,17 +9,22 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Navigation } from './Navigation';
-import { Calendar, MapPin, Users, Plus } from 'lucide-react';
+import { Calendar, MapPin, Users, Plus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getEvents } from '../lib/api';
+import { getEvents, deleteEvent } from '../lib/api';
 import { useWallet } from '../contexts/WalletContext';
+import { useConnection, useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
+import { Transaction } from '@solana/web3.js';
 import type { Event } from '../types';
 
 export function ManageEventsPage() {
   const { connected, publicKey, connect } = useWallet();
+  const { connection } = useConnection();
+  const wallet = useSolanaWallet();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null); // eventPubkey being deleted
 
   useEffect(() => {
     if (!connected || !publicKey) return;
@@ -42,6 +47,27 @@ export function ManageEventsPage() {
       cancelled = true;
     };
   }, [connected, publicKey]);
+
+  async function handleDeleteEvent(event: Event) {
+    if (!publicKey || !wallet.signTransaction || !event.eventPubkey) return;
+    if (!confirm(`Delete "${event.title}"? This closes the on-chain account and returns rent SOL to you.`)) return;
+
+    setDeleting(event.eventPubkey);
+    setError(null);
+    try {
+      const { transaction: txBase64 } = await deleteEvent(publicKey, event.eventPubkey);
+      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const signed = await wallet.signTransaction(tx);
+      const sig = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction(sig, 'confirmed');
+      // Remove from local list
+      setEvents((prev) => prev.filter((e) => e.eventPubkey !== event.eventPubkey));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete event');
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#090b0b] text-[#fafaf9]">
@@ -136,19 +162,32 @@ export function ManageEventsPage() {
                       </div>
 
                       <div className="mt-5 flex items-center justify-between">
-                        <Link
-                          to={`/events/${event.id}/attendees`}
-                          className="inline-flex items-center gap-2 text-sm text-[#32b377] hover:text-[#2a9865]"
-                        >
-                          <Users className="w-4 h-4" />
-                          View attendees
-                        </Link>
-                        <Link
-                          to={`/purchase/${event.id}`}
-                          className="text-sm text-[#87928e] hover:text-[#fafaf9]"
-                        >
-                          View as fan
-                        </Link>
+                        <div className="flex items-center gap-4">
+                          <Link
+                            to={`/events/${event.id}/attendees`}
+                            className="inline-flex items-center gap-2 text-sm text-[#32b377] hover:text-[#2a9865]"
+                          >
+                            <Users className="w-4 h-4" />
+                            View attendees
+                          </Link>
+                          <Link
+                            to={`/purchase/${event.id}`}
+                            className="text-sm text-[#87928e] hover:text-[#fafaf9]"
+                          >
+                            View as fan
+                          </Link>
+                        </div>
+                        {event.eventPubkey && (
+                          <button
+                            onClick={() => handleDeleteEvent(event)}
+                            disabled={deleting === event.eventPubkey}
+                            className="inline-flex items-center gap-1.5 text-sm text-[#87928e] hover:text-[#ff6464] transition-colors disabled:opacity-50"
+                            title="Delete event from chain"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            {deleting === event.eventPubkey ? 'Deleting...' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

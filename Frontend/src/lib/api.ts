@@ -185,6 +185,28 @@ export async function getEventAttendees(eventId: string): Promise<{ attendees: {
   return res.json();
 }
 
+export interface DeleteEventResponse {
+  transaction: string;
+  message?: string;
+}
+
+/**
+ * Build a close_event transaction (on-chain).
+ * Returns a base64 transaction for the organizer to sign.
+ */
+export async function deleteEvent(organizerPubkey: string, eventPubkey: string): Promise<DeleteEventResponse> {
+  const res = await apiFetch('/api/events', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizerPubkey, eventPubkey }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.error ?? 'Failed to build delete event transaction');
+  }
+  return res.json();
+}
+
 export interface ListForResaleResponse {
   transaction: string;
   listingPubkey: string;
