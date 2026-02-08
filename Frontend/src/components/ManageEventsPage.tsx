@@ -15,6 +15,7 @@ import { getEvents, deleteEvent } from '../lib/api';
 import { useWallet } from '../contexts/WalletContext';
 import { useConnection, useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
 import { Transaction } from '@solana/web3.js';
+import { base64ToUint8Array } from '../lib/base64';
 import type { Event } from '../types';
 
 export function ManageEventsPage() {
@@ -56,7 +57,7 @@ export function ManageEventsPage() {
     setError(null);
     try {
       const { transaction: txBase64 } = await deleteEvent(publicKey, event.eventPubkey);
-      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const tx = Transaction.from(base64ToUint8Array(txBase64));
       const signed = await wallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(sig, 'confirmed');

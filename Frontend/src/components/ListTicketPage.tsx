@@ -20,6 +20,7 @@ import { Wallet, TrendingUp, Shield, DollarSign, ArrowLeft, Check } from 'lucide
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { getMyTickets, listForResale, confirmListing } from '../lib/api';
+import { base64ToUint8Array } from '../lib/base64';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../contexts/WalletContext';
 import { useConnection, useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
@@ -84,7 +85,7 @@ export function ListTicketPage() {
         ticket.ticketMint,
         priceSol,
       );
-      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const tx = Transaction.from(base64ToUint8Array(txBase64));
       const signed = await solanaWallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(sig, 'confirmed');

@@ -13,6 +13,7 @@ import { Navigation } from './Navigation';
 import { Calendar, Ticket, Users, X, Shield, Tag, XCircle, Wallet } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getMyTickets, getListings, getEvent, listForResaleBatch, cancelListing, confirmCancelListing } from '../lib/api';
+import { base64ToUint8Array } from '../lib/base64';
 import { useWallet, shortenAddress } from '../contexts/WalletContext';
 import { useConnection, useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
 import { Transaction } from '@solana/web3.js';
@@ -113,7 +114,7 @@ export function MyTicketsPage() {
     setError(null);
     try {
       const { transaction: txBase64 } = await cancelListing(publicKey, listed.ticketMint);
-      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const tx = Transaction.from(base64ToUint8Array(txBase64));
       const signed = await wallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(sig, 'confirmed');
@@ -165,7 +166,7 @@ export function MyTicketsPage() {
         priceSol,
       }));
       const { transaction: txBase64 } = await listForResaleBatch(publicKey, listings);
-      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const tx = Transaction.from(base64ToUint8Array(txBase64));
       const signed = await wallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(sig, 'confirmed');

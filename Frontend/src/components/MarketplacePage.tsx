@@ -20,6 +20,7 @@ import { Navigation } from './Navigation';
 import { TrendingUp, TrendingDown, Clock, Shield, Star, DollarSign, Users, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getListings, buyResale, confirmResalePurchase } from '../lib/api';
+import { base64ToUint8Array } from '../lib/base64';
 import { useWallet } from '../contexts/WalletContext';
 import { useConnection, useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
 import { Transaction } from '@solana/web3.js';
@@ -50,7 +51,7 @@ export function MarketplacePage() {
     setBuying(listing.ticketMint);
     try {
       const { transaction: txBase64 } = await buyResale(publicKey, listing.ticketMint);
-      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const tx = Transaction.from(base64ToUint8Array(txBase64));
       const signed = await wallet.signTransaction(tx);
       const sig = await connection.sendRawTransaction(signed.serialize());
       await connection.confirmTransaction(sig, 'confirmed');
@@ -267,7 +268,7 @@ export function MarketplacePage() {
                   <div className="flex-1">
                     <div className="flex items-start gap-4">
                       {/* Event Icon/Visual */}
-                      <div className="w-16 h-16 bg-gradient-to-br from-[#32b377] to-[#1a6a4a] rounded-xl flex items-center justify-center shrink-0">
+                      <div className="w-16 h-16 bg-linear-to-br from-[#32b377] to-[#1a6a4a] rounded-xl flex items-center justify-center shrink-0">
                         <Shield className="w-8 h-8 text-[#fafaf9]" />
                       </div>
                       
@@ -407,7 +408,7 @@ export function MarketplacePage() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="bg-gradient-to-br from-[rgba(50,179,119,0.1)] to-[rgba(50,179,119,0.05)] border border-[rgba(50,179,119,0.2)] rounded-2xl p-12 text-center"
+            className="bg-linear-to-br from-[rgba(50,179,119,0.1)] to-[rgba(50,179,119,0.05)] border border-[rgba(50,179,119,0.2)] rounded-2xl p-12 text-center"
           >
             <h2 className="font-['Space_Grotesk:Bold',sans-serif] text-4xl mb-4">
               Have tickets to sell?
