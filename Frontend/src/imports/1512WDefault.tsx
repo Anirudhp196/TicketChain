@@ -563,7 +563,7 @@ function Container20() {
   return (
     <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
       <div className="flex flex-col font-['Space_Grotesk:Bold',sans-serif] font-bold justify-center leading-[0] relative shrink-0 text-[#fafaf9] text-[30px] text-center whitespace-nowrap">
-        <p className="leading-[36px]">40/40/20</p>
+        <p className="leading-[36px]">Custom</p>
       </div>
     </div>
   );
@@ -573,7 +573,7 @@ function Container21() {
   return (
     <div className="content-stretch flex flex-col items-center relative shrink-0 w-full" data-name="Container">
       <div className="flex flex-col font-['Inter:Regular',sans-serif] font-normal justify-center leading-[0] not-italic relative shrink-0 text-[#87928e] text-[14px] text-center whitespace-nowrap">
-        <p className="leading-[20px]">Fair Resale Split</p>
+        <p className="leading-[20px]">Artist-Set Resale Split</p>
       </div>
     </div>
   );

@@ -113,7 +113,7 @@ export function LandingPage() {
           >
             {[
               { value: "10K+", label: "Tickets Minted", icon: Ticket },
-              { value: "40/40/20", label: "Fair Resale Split", icon: TrendingUp },
+              { value: "Custom", label: "Fair Resale Split", icon: TrendingUp },
               { value: "< 0.001", label: "SOL per Transaction", icon: Zap }
             ].map((stat, index) => (
               <motion.div

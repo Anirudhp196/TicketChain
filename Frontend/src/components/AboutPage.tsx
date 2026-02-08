@@ -194,7 +194,7 @@ export function AboutPage() {
               {
                 icon: <TrendingUp className="w-6 h-6" />,
                 title: "Fair Resale Logic",
-                description: "40/40/20 split enforced by smart contract. Artists auto-receive royalties on every secondary sale."
+                description: "Artists set their resale share (0–80%); platform takes 20%, seller gets the rest. Enforced on-chain on every secondary sale."
               }
             ].map((tech, index) => (
               <motion.div

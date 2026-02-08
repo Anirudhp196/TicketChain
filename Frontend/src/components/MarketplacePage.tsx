@@ -3,7 +3,7 @@
  * 
  * Key Features:
  * - Secondary market for ticket resale
- * - Fair pricing display (40/40/20 split visualization)
+ * - Fair pricing display (custom artist/seller/platform split per event)
  * - Data from API (mock until Listing PDAs are wired)
  * - Seller reputation badges
  * 
