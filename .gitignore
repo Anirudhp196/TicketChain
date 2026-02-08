@@ -14,6 +14,8 @@ dist/
 *.local
 .pnpm-store/
 .env
+Frontend/.env
+backend/.env
 
 # Solana / Anchor build artifacts
 backend/program/target/
