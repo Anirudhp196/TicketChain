@@ -24,6 +24,7 @@ import { ListTicketPage } from './components/ListTicketPage';
 import { MyTicketsPage } from './components/MyTicketsPage';
 import { EventAttendeesPage } from './components/EventAttendeesPage';
 import { ManageEventsPage } from './components/ManageEventsPage';
+import { AnnouncementsPage } from './components/AnnouncementsPage';
 
 export default function App() {
   return (
@@ -48,6 +49,9 @@ export default function App() {
 
         {/* Organizer flow - manage events */}
         <Route path="/manage-events" element={<ManageEventsPage />} />
+
+        {/* Announcements */}
+        <Route path="/announcements" element={<AnnouncementsPage />} />
         
         {/* Purchase ticket flow */}
         <Route path="/purchase/:eventId" element={<PurchaseTicketPage />} />

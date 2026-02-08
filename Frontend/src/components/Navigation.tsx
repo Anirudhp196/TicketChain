@@ -64,6 +64,14 @@ export function Navigation() {
             Manage Events
           </Link>
           <Link
+            to="/announcements"
+            className={`font-['Inter:Medium',sans-serif] text-sm transition-colors ${
+              isActive('/announcements') ? 'text-[#32b377]' : 'text-[#87928e] hover:text-[#fafaf9]'
+            }`}
+          >
+            Announcements
+          </Link>
+          <Link
             to="/about"
             className={`font-['Inter:Medium',sans-serif] text-sm transition-colors ${
               isActive('/about') ? 'text-[#32b377]' : 'text-[#87928e] hover:text-[#fafaf9]'

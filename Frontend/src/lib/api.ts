@@ -341,3 +341,41 @@ export async function confirmResalePurchase(
   }
   return res.json();
 }
+
+// ── Announcements ─────────────────────────────────────────────────────
+
+export interface Announcement {
+  id?: number;
+  event_pubkey: string;
+  event_title?: string;
+  organizer_pubkey: string;
+  message: string;
+  created_at?: string;
+}
+
+export async function getAnnouncements(eventPubkey?: string): Promise<Announcement[]> {
+  const qs = eventPubkey ? `?eventPubkey=${encodeURIComponent(eventPubkey)}` : '';
+  const res = await apiFetch(`/api/announcements${qs}`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.error ?? 'Failed to fetch announcements');
+  }
+  return res.json();
+}
+
+export async function createAnnouncement(
+  organizerPubkey: string,
+  eventPubkey: string,
+  message: string,
+): Promise<Announcement> {
+  const res = await apiFetch('/api/announcements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizerPubkey, eventPubkey, message }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.error ?? 'Failed to create announcement');
+  }
+  return res.json();
+}

@@ -36,6 +36,8 @@ import {
   getCachedListings,
   upsertListing,
   removeListingByTicketMint,
+  addAnnouncement,
+  getAnnouncements,
 } from './db.js';
 import { startSync, triggerSync } from './sync.js';
 
@@ -48,6 +50,7 @@ app.use(express.json());
 // ── In-memory fallback (used when Supabase is not configured) ────────
 const inMemoryPurchases = [];
 let nextTicketId = 1;
+const inMemoryAnnouncements = [];
 
 // ── Helper: convert chain event to frontend shape ────────────────────
 function chainEventToFrontend(ce) {
@@ -671,6 +674,60 @@ app.delete('/api/listings', async (req, res) => {
   } catch (e) {
     console.error('cancel_listing build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build cancel_listing transaction' });
+  }
+});
+
+// ── Announcements ─────────────────────────────────────────────────────
+
+app.get('/api/announcements', async (req, res) => {
+  const eventPubkey = req.query.eventPubkey;
+  try {
+    const rows = await getAnnouncements({ eventPubkey });
+    if (rows) return res.json(rows);
+    const fallback = eventPubkey
+      ? inMemoryAnnouncements.filter((a) => a.event_pubkey === eventPubkey)
+      : inMemoryAnnouncements;
+    return res.json(fallback);
+  } catch (e) {
+    console.error('GET /api/announcements failed:', e.message);
+    res.json([]);
+  }
+});
+
+app.post('/api/announcements', async (req, res) => {
+  const { organizerPubkey, eventPubkey, message } = req.body ?? {};
+  if (!organizerPubkey || !eventPubkey || !message) {
+    return res.status(400).json({ error: 'Missing required fields: organizerPubkey, eventPubkey, message' });
+  }
+  try {
+    const cachedEvent = await getCachedEvent(eventPubkey);
+    if (!cachedEvent) {
+      return res.status(400).json({ error: 'Event not found in cache. Please try again shortly.' });
+    }
+    if (cachedEvent.organizer_pubkey !== organizerPubkey) {
+      return res.status(403).json({ error: 'Only the organizer can post announcements' });
+    }
+
+    const announcement = {
+      event_pubkey: eventPubkey,
+      event_title: cachedEvent.title,
+      organizer_pubkey: organizerPubkey,
+      message: String(message).slice(0, 500),
+      created_at: new Date().toISOString(),
+    };
+
+    const inserted = await addAnnouncement({
+      eventPubkey,
+      eventTitle: cachedEvent.title,
+      organizerPubkey,
+      message: announcement.message,
+    });
+
+    inMemoryAnnouncements.unshift(announcement);
+    res.json(inserted ?? announcement);
+  } catch (e) {
+    console.error('POST /api/announcements failed:', e.message);
+    res.status(500).json({ error: 'Failed to create announcement' });
   }
 });
 

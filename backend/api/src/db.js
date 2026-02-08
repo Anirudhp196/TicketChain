@@ -240,6 +240,51 @@ export async function getCachedListings() {
   return data;
 }
 
+// ── Announcements ─────────────────────────────────────────────────────
+
+/**
+ * Insert an announcement row.
+ */
+export async function addAnnouncement(announcement) {
+  if (!supabase) return null;
+  const row = {
+    event_pubkey: announcement.eventPubkey,
+    event_title: announcement.eventTitle,
+    organizer_pubkey: announcement.organizerPubkey,
+    message: announcement.message,
+  };
+  const { data, error } = await supabase
+    .from('announcements')
+    .insert(row)
+    .select('*')
+    .maybeSingle();
+  if (error) {
+    console.error('addAnnouncement error:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Read announcements. Returns null if Supabase not available.
+ */
+export async function getAnnouncements({ eventPubkey } = {}) {
+  if (!supabase) return null;
+  let query = supabase
+    .from('announcements')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (eventPubkey) {
+    query = query.eq('event_pubkey', eventPubkey);
+  }
+  const { data, error } = await query;
+  if (error) {
+    console.error('getAnnouncements error:', error.message);
+    return null;
+  }
+  return data;
+}
+
 /**
  * Replace all cached listings with the current on-chain set (removes stale ones).
  */

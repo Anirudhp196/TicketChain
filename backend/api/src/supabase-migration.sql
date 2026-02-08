@@ -52,3 +52,15 @@ create table if not exists listings (
   price_sol numeric,
   synced_at timestamptz default now()
 );
+
+-- Announcements (off-chain messages from organizers)
+create table if not exists announcements (
+  id serial primary key,
+  event_pubkey text not null,
+  event_title text,
+  organizer_pubkey text not null,
+  message text not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_announcements_event on announcements (event_pubkey);
