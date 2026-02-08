@@ -73,6 +73,25 @@ The Solana program at `backend/program/programs/ticketchain/src/lib.rs` exposes 
 
 All accounts use PDA seeds so the program can sign on their behalf without private keys.
 
+### Why Smart Contracts? What They Actually Solve
+
+Traditional ticketing is broken in three fundamental ways — and each is fixed by putting the logic on-chain:
+
+**1. Counterfeiting → NFT Tickets**
+Paper and QR-code tickets are trivially duplicated. With TicketChain, every ticket is a unique SPL token on Solana. Ownership is cryptographically verified by the blockchain — you either hold the token in your wallet or you don't. There is no PDF to screenshot, no barcode to photocopy. The venue can verify authenticity by checking the on-chain mint.
+
+**2. Scalpers Keep All the Profit → Enforced Revenue Splits**
+On traditional platforms, scalpers buy tickets at face value and resell at 5–10× markup. The organizer and original platform see zero revenue from that resale. In TicketChain, the `buy_resale` instruction enforces a three-way SOL split *atomically in the same transaction* — the organizer's cut, the seller's cut, and the platform fee all move at once. No one can bypass this because it's program logic, not a Terms of Service. Organizers choose their split (0–80%) when they create the event, and it cannot be changed after the fact.
+
+**3. Centralized Control & Opaque Fees → Trustless, Transparent Rules**
+With centralized ticketing, the platform can change fees, freeze accounts, or shut down at any time. TicketChain's rules live in an immutable Solana program. The escrow mechanism (listing locks the NFT in a program-owned account, buying atomically releases it) means neither the platform nor the API server can steal funds or tickets. The API only builds unsigned transactions — it never touches private keys. All fee logic is visible in the open-source Rust code and verifiable on the Solana explorer.
+
+**Why Solana specifically?**
+- **Sub-second finality (~400ms)** — ticket purchases confirm in real-time, no "pending" states
+- **Negligible fees (~0.00001 SOL per tx)** — minting an NFT ticket costs a fraction of a cent, making it viable even for free or low-cost events
+- **Native SPL token standard** — tickets are real tokens in the user's wallet, interoperable with any Solana wallet or marketplace
+- **PDA-based escrow** — the program can custody NFTs and split SOL without any private key, eliminating custodial risk entirely
+
 ---
 
 ## Project Structure
