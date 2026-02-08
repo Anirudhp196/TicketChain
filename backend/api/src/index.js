@@ -95,14 +95,8 @@ function saveData() {
 
 loadData();
 
-// Mock events (match Frontend shape)
-const MOCK_EVENTS = [
-  { id: 1, title: 'Synthwave Sunset Festival', artist: 'Neon Dreams', date: 'March 15, 2026', location: 'Los Angeles, CA', price: 0.5, available: 234, total: 500, status: 'On Sale', loyaltyRequired: null, type: 'Concert' },
-  { id: 2, title: 'Lakers vs Warriors', artist: 'NBA', date: 'March 22, 2026', location: 'Los Angeles, CA', price: 0.8, available: 89, total: 300, status: 'Almost Sold Out', loyaltyRequired: null, type: 'Sports' },
-];
-
 function getAllEvents() {
-  return [...MOCK_EVENTS, ...onChainEvents];
+  return [...onChainEvents];
 }
 
 function findEventById(id) {
