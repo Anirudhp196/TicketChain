@@ -13,7 +13,7 @@ import {
   pruneStaleEvents,
 } from './db.js';
 
-const SYNC_INTERVAL_MS = 30_000; // 30 seconds
+const SYNC_INTERVAL_MS = 10_000; // 10 seconds
 
 let syncing = false;
 
@@ -62,4 +62,12 @@ export function startSync() {
   }, SYNC_INTERVAL_MS);
 
   console.log(`[sync] Chain sync started (every ${SYNC_INTERVAL_MS / 1000}s)`);
+}
+
+/**
+ * Trigger an immediate sync (e.g. after a write operation).
+ * Non-blocking — fires and forgets so the API response isn't delayed.
+ */
+export function triggerSync() {
+  setTimeout(() => syncFromChain(), 2000); // 2s delay to let the tx confirm on-chain
 }

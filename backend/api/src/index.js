@@ -32,7 +32,7 @@ import {
   getPurchasesByEvent,
   getCachedListings,
 } from './db.js';
-import { startSync, syncFromChain } from './sync.js';
+import { startSync, triggerSync } from './sync.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -215,6 +215,7 @@ app.post('/api/events', async (req, res) => {
     }]);
 
     res.json({ transaction, eventPubkey, eventId: `chain-${eventPubkey.slice(0, 8)}` });
+    triggerSync();
   } catch (e) {
     console.error('create_event build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build create_event transaction' });
@@ -234,6 +235,7 @@ app.delete('/api/events', async (req, res) => {
     await removeCachedEvent(eventPubkey);
 
     res.json({ transaction, message: 'Sign and submit to delete the event. Rent SOL will be returned.' });
+    triggerSync();
   } catch (e) {
     console.error('close_event build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build close_event transaction' });
@@ -381,6 +383,7 @@ app.post('/api/tickets/confirm', async (req, res) => {
     inMemoryPurchases.push(ticket);
 
     res.json({ ticket });
+    triggerSync();
   } catch (e) {
     console.error('POST /api/tickets/confirm failed:', e.message);
     res.status(500).json({ error: 'Failed to confirm purchase' });
@@ -484,6 +487,7 @@ app.post('/api/listings', async (req, res) => {
       sellerWallet, eventPubkey, ticketMint, priceLamports
     );
     res.json({ transaction, listingPubkey });
+    triggerSync();
   } catch (e) {
     console.error('list_for_resale build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build list_for_resale transaction' });
@@ -498,6 +502,7 @@ app.post('/api/listings/buy', async (req, res) => {
   try {
     const transaction = await buildBuyResaleTransaction(buyerWallet, ticketMint);
     res.json({ transaction, message: 'Sign and submit to buy the resale ticket' });
+    triggerSync();
   } catch (e) {
     console.error('buy_resale build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build buy_resale transaction' });
@@ -512,6 +517,7 @@ app.delete('/api/listings', async (req, res) => {
   try {
     const transaction = await buildCancelListingTransaction(sellerWallet, ticketMint);
     res.json({ transaction, message: 'Sign and submit to cancel the listing' });
+    triggerSync();
   } catch (e) {
     console.error('cancel_listing build failed', e);
     res.status(500).json({ error: e.message ?? 'Failed to build cancel_listing transaction' });
