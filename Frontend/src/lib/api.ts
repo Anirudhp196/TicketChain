@@ -229,6 +229,29 @@ export interface BuyResaleResponse {
  * Build a buy_resale transaction (on-chain).
  * Returns a base64 transaction for the buyer to sign.
  */
+export interface CancelListingResponse {
+  transaction: string;
+  message?: string;
+}
+
+/**
+ * Build a cancel_listing transaction (on-chain).
+ * Returns a base64 transaction for the seller to sign.
+ * The NFT is returned from escrow back to the seller's wallet.
+ */
+export async function cancelListing(sellerWallet: string, ticketMint: string): Promise<CancelListingResponse> {
+  const res = await apiFetch('/api/listings', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sellerWallet, ticketMint }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.error ?? 'Failed to build cancel listing transaction');
+  }
+  return res.json();
+}
+
 export async function buyResale(buyerWallet: string, ticketMint: string): Promise<BuyResaleResponse> {
   const res = await apiFetch('/api/listings/buy', {
     method: 'POST',

@@ -10,13 +10,13 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navigation } from './Navigation';
-import { Calendar, Ticket, Users, X, Shield } from 'lucide-react';
+import { Calendar, Ticket, Users, X, Shield, Tag, XCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getMyTickets, listForResale } from '../lib/api';
+import { getMyTickets, getListings, listForResale, cancelListing } from '../lib/api';
 import { useWallet, shortenAddress } from '../contexts/WalletContext';
 import { useConnection, useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
 import { Transaction } from '@solana/web3.js';
-import type { Ticket as TicketType } from '../types';
+import type { Ticket as TicketType, Listing } from '../types';
 
 export function MyTicketsPage() {
   const { connected, publicKey, connect } = useWallet();
@@ -26,6 +26,10 @@ export function MyTicketsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Listed tickets (in escrow on marketplace)
+  const [listedTickets, setListedTickets] = useState<Listing[]>([]);
+  const [cancellingMint, setCancellingMint] = useState<string | null>(null);
 
   // Resale modal state
   const [resaleTicket, setResaleTicket] = useState<TicketType | null>(null);
@@ -39,9 +43,20 @@ export function MyTicketsPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getMyTickets(publicKey)
-      .then((data) => {
-        if (!cancelled) setTickets(data);
+
+    // Fetch owned tickets and marketplace listings in parallel
+    Promise.all([
+      getMyTickets(publicKey),
+      getListings(),
+    ])
+      .then(([ticketData, listingData]) => {
+        if (cancelled) return;
+        setTickets(ticketData);
+        // Filter listings to only show ones from this wallet
+        const myListings = listingData.filter(
+          (l) => l.sellerWallet === publicKey
+        );
+        setListedTickets(myListings);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load tickets');
@@ -67,6 +82,25 @@ export function MyTicketsPage() {
     setListing(false);
     setListSuccess(false);
     setModalError(null);
+  }
+
+  async function handleCancelListing(listed: Listing) {
+    if (!publicKey || !wallet.signTransaction || !listed.ticketMint) return;
+    setCancellingMint(listed.ticketMint);
+    setError(null);
+    try {
+      const { transaction: txBase64 } = await cancelListing(publicKey, listed.ticketMint);
+      const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
+      const signed = await wallet.signTransaction(tx);
+      const sig = await connection.sendRawTransaction(signed.serialize());
+      await connection.confirmTransaction(sig, 'confirmed');
+      // Remove from local state
+      setListedTickets((prev) => prev.filter((l) => l.ticketMint !== listed.ticketMint));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to cancel listing');
+    } finally {
+      setCancellingMint(null);
+    }
   }
 
   async function handleListForResale() {
@@ -177,62 +211,121 @@ export function MyTicketsPage() {
                     <div key={i} className="h-48 bg-[#131615] border border-[#262b2a] rounded-2xl animate-pulse" />
                   ))}
                 </div>
-              ) : tickets.length === 0 ? (
+              ) : tickets.length === 0 && listedTickets.length === 0 ? (
                 <div className="p-6 bg-[#131615] border border-[#262b2a] rounded-2xl text-[#87928e] font-['Inter:Medium',sans-serif]">
                   No tickets yet. Buy one from the events page.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {tickets.map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      className="bg-[#131615] border border-[#262b2a] rounded-2xl p-6"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h3 className="font-['Space_Grotesk:Bold',sans-serif] text-xl">
-                            {ticket.event}
-                          </h3>
-                          <p className="text-[#87928e] text-sm font-['Inter:Medium',sans-serif]">
-                            {ticket.artist} • {ticket.tier}
-                          </p>
-                        </div>
-                        <div className="w-10 h-10 rounded-full bg-[rgba(50,179,119,0.1)] flex items-center justify-center">
-                          <Ticket className="w-5 h-5 text-[#32b377]" />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2 text-sm text-[#87928e]">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-[#32b377]" />
-                          <span>{ticket.date}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span>Paid</span>
-                          <span className="text-[#fafaf9]">{ticket.purchasePrice} SOL</span>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex items-center gap-3">
-                        {ticket.eventId != null && (
-                          <Link
-                            to={`/events/${ticket.eventId}/attendees`}
-                            className="inline-flex items-center gap-2 text-sm text-[#32b377] hover:text-[#2a9865]"
-                          >
-                            <Users className="w-4 h-4" />
-                            View attendees
-                          </Link>
-                        )}
-                        <button
-                          onClick={() => openResaleModal(ticket)}
-                          className="ml-auto text-sm text-[#87928e] hover:text-[#32b377] transition-colors font-['Inter:Medium',sans-serif]"
+                <>
+                  {/* Owned tickets grid */}
+                  {tickets.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {tickets.map((ticket) => (
+                        <div
+                          key={ticket.id}
+                          className="bg-[#131615] border border-[#262b2a] rounded-2xl p-6"
                         >
-                          List for resale
-                        </button>
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <h3 className="font-['Space_Grotesk:Bold',sans-serif] text-xl">
+                                {ticket.event}
+                              </h3>
+                              <p className="text-[#87928e] text-sm font-['Inter:Medium',sans-serif]">
+                                {ticket.artist} • {ticket.tier}
+                              </p>
+                            </div>
+                            <div className="w-10 h-10 rounded-full bg-[rgba(50,179,119,0.1)] flex items-center justify-center">
+                              <Ticket className="w-5 h-5 text-[#32b377]" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 text-sm text-[#87928e]">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-[#32b377]" />
+                              <span>{ticket.date}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Paid</span>
+                              <span className="text-[#fafaf9]">{ticket.purchasePrice} SOL</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 flex items-center gap-3">
+                            {ticket.eventId != null && (
+                              <Link
+                                to={`/events/${ticket.eventId}/attendees`}
+                                className="inline-flex items-center gap-2 text-sm text-[#32b377] hover:text-[#2a9865]"
+                              >
+                                <Users className="w-4 h-4" />
+                                View attendees
+                              </Link>
+                            )}
+                            <button
+                              onClick={() => openResaleModal(ticket)}
+                              className="ml-auto text-sm text-[#87928e] hover:text-[#32b377] transition-colors font-['Inter:Medium',sans-serif]"
+                            >
+                              List for resale
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Listed for Resale section */}
+                  {listedTickets.length > 0 && (
+                    <div className="mt-12">
+                      <h2 className="font-['Space_Grotesk:Bold',sans-serif] text-2xl mb-6">
+                        Listed for <span className="text-[#32b377]">Resale</span>
+                      </h2>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {listedTickets.map((listed) => (
+                          <div
+                            key={listed.id}
+                            className="bg-[#131615] border border-[rgba(50,179,119,0.3)] rounded-2xl p-6"
+                          >
+                            <div className="flex items-start justify-between mb-4">
+                              <div>
+                                <h3 className="font-['Space_Grotesk:Bold',sans-serif] text-xl">
+                                  {listed.event ?? 'Event'}
+                                </h3>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Tag className="w-3.5 h-3.5 text-[#32b377]" />
+                                  <span className="text-[#87928e] text-sm font-['Inter:Medium',sans-serif]">
+                                    On marketplace
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="w-10 h-10 rounded-full bg-[rgba(50,179,119,0.1)] flex items-center justify-center">
+                                <Tag className="w-5 h-5 text-[#32b377]" />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2 text-sm text-[#87928e]">
+                              <div className="flex items-center justify-between">
+                                <span>Listing Price</span>
+                                <span className="text-[#32b377] font-['Space_Grotesk:Bold',sans-serif] text-lg">
+                                  {listed.currentPrice} SOL
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="mt-5">
+                              <button
+                                onClick={() => handleCancelListing(listed)}
+                                disabled={cancellingMint === listed.ticketMint}
+                                className="w-full flex items-center justify-center gap-2 border border-[rgba(255,100,100,0.3)] hover:border-[rgba(255,100,100,0.6)] bg-[rgba(255,100,100,0.05)] hover:bg-[rgba(255,100,100,0.1)] disabled:opacity-60 disabled:cursor-not-allowed transition-all px-4 py-2.5 rounded-xl text-sm text-[#ff6464] font-['Inter:Medium',sans-serif]"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                {cancellingMint === listed.ticketMint ? 'Cancelling...' : 'Cancel Listing'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </>
           )}
